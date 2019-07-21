@@ -1,0 +1,11 @@
+name: Cyclic
+version: ${project.version}
+main: com.voichick.cyclic.Cyclic
+load: STARTUP
+api-version: "1.14"
+depend:
+  - ProtocolLib
+commands:
+  unloadall:
+    description: yo
+
