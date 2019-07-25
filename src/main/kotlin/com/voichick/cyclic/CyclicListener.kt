@@ -2,13 +2,14 @@ package com.voichick.cyclic
 
 import net.jcip.annotations.NotThreadSafe
 import org.bukkit.Location
-import org.bukkit.Material
 import org.bukkit.block.Block
+import org.bukkit.craftbukkit.v1_14_R1.CraftChunk
 import org.bukkit.event.EventHandler
+import org.bukkit.event.EventPriority.HIGHEST
+import org.bukkit.event.EventPriority.LOWEST
 import org.bukkit.event.Listener
-import org.bukkit.event.block.BlockBreakEvent
-import org.bukkit.event.block.BlockPlaceEvent
 import org.bukkit.event.player.PlayerQuitEvent
+import org.bukkit.event.player.PlayerTeleportEvent
 import org.bukkit.event.world.ChunkLoadEvent
 import org.bukkit.event.world.ChunkUnloadEvent
 import java.lang.Math.floorMod
@@ -16,8 +17,7 @@ import java.lang.Math.floorMod
 @NotThreadSafe
 class CyclicListener(private val plugin: Cyclic) : Listener {
 
-    // TODO priority
-    @EventHandler
+    @EventHandler(priority = LOWEST)
     fun onChunkLoad(event: ChunkLoadEvent) {
         val chunk = event.chunk
         val x = chunk.x
@@ -25,41 +25,25 @@ class CyclicListener(private val plugin: Cyclic) : Listener {
         if (x in 0 until X_CHUNKS && z in 0 until Z_CHUNKS)
             return
         val srcChunk = chunk.world.getChunkAt(floorMod(x, X_CHUNKS), floorMod(z, Z_CHUNKS))
-        // TODO faster copy
-        for (localX in 0..15)
-            for (y in 0..255)
-                for (localZ in 0..15)
-                    chunk.getBlock(localX, y, localZ).setBlockData(srcChunk.getBlock(localX, y, localZ).blockData, false)
+        val targetSections = (chunk as? CraftChunk)?.handle?.sections ?: return
+        (srcChunk as? CraftChunk)?.handle?.sections?.copyInto(targetSections)
     }
 
-    // TODO priority
-    @EventHandler
-    fun onBlockPlace(event: BlockPlaceEvent) {
-        if (event.isCancelled) return
-        val block = event.block
-        for (other in block.parallelBlocks)
-            other.setType(event.itemInHand.type, false)
+    @EventHandler(priority = LOWEST, ignoreCancelled = true)
+    fun onPlayerTeleport(event: PlayerTeleportEvent) {
+        val newTo = event.to?.representative ?: return
+        event.setTo(newTo)
     }
 
-    // TODO priority
-    @EventHandler
-    fun onBlockBreak(event: BlockBreakEvent) {
-        if (event.isCancelled) return
-        for (other in event.block.parallelBlocks)
-            other.setType(Material.AIR, false)
+    @EventHandler(priority = HIGHEST)
+    fun onPlayerQuit(event: PlayerQuitEvent) {
+        event.player.teleport(event.player.location.representative)
     }
 
-    // TODO priority
-    @EventHandler
+    @EventHandler(priority = HIGHEST)
     fun onChunkUnload(event: ChunkUnloadEvent) {
         val chunk = event.chunk
         event.isSaveChunk = chunk.x in 0 until X_CHUNKS && chunk.z in 0 until Z_CHUNKS
-    }
-
-    // TODO priority
-    @EventHandler
-    fun onPlayerQuit(event: PlayerQuitEvent) {
-        event.player.teleport(event.player.location.representative)
     }
 
     private val Location.representative: Location
