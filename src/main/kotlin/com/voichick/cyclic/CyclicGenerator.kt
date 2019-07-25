@@ -5,6 +5,7 @@ import org.bukkit.Material
 import org.bukkit.World
 import org.bukkit.block.Biome
 import org.bukkit.generator.ChunkGenerator
+import java.lang.Math.floorMod
 import java.util.*
 
 class CyclicGenerator : ChunkGenerator() {
@@ -15,8 +16,20 @@ class CyclicGenerator : ChunkGenerator() {
             for (localZ in 0..15)
                 biome.setBiome(localX, localZ, Biome.PLAINS)
         val result = createChunkData(world)
-        if (x < 0 || x >= X_CHUNKS || z < 0 || z >= Z_CHUNKS)
+        if (x < 0 || x >= X_CHUNKS || z < 0 || z >= Z_CHUNKS) {
+//            val sourceX = floorMod(x, X_CHUNKS)
+//            val sourceZ = floorMod(z, Z_CHUNKS)
+//            if (!world.isChunkGenerated(sourceX, sourceZ))
+//                return result
+//            val sourceChunk = world.getChunkAt(sourceX, sourceZ)
+//            for (localX in 0..15)
+//                for (localY in 0 until result.maxHeight)
+//                    for (localZ in 0..15) {
+//                        val data = sourceChunk.getBlock(localX, localY, localZ).blockData
+//                        result.setBlock(localX, localY, localZ, data)
+//                    }
             return result
+        }
         result.setRegion(0, 0, 0, 16, 1, 16, Material.BEDROCK)
         result.setRegion(0, 1, 0, 16, 60, 16, Material.STONE)
         result.setRegion(0, 60, 0, 16, 63, 16, Material.DIRT)
@@ -35,7 +48,7 @@ class CyclicGenerator : ChunkGenerator() {
 
     override fun getFixedSpawnLocation(world: World, random: Random) = Location(world, 0.0, 4.0, 0.0)
 
-    override fun isParallelCapable() = true
+    override fun isParallelCapable() = false
 
     companion object {
         val concretes = arrayOf(Material.WHITE_CONCRETE, Material.ORANGE_CONCRETE, Material.MAGENTA_CONCRETE, Material.LIGHT_BLUE_CONCRETE, Material.YELLOW_CONCRETE, Material.LIME_CONCRETE, Material.PINK_CONCRETE, Material.GRAY_CONCRETE, Material.LIGHT_GRAY_CONCRETE, Material.CYAN_CONCRETE, Material.PURPLE_CONCRETE, Material.BLUE_CONCRETE, Material.BROWN_CONCRETE, Material.GREEN_CONCRETE, Material.RED_CONCRETE, Material.BLACK_CONCRETE)

@@ -5,7 +5,3 @@ load: STARTUP
 api-version: "1.14"
 depend:
   - ProtocolLib
-commands:
-  unloadall:
-    description: yo
-
