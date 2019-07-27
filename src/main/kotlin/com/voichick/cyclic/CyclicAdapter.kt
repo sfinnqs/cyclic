@@ -9,6 +9,9 @@ import com.comphenix.protocol.wrappers.BlockPosition
 import com.google.common.collect.MapMaker
 import java.lang.Math.floorMod
 import java.util.*
+import com.voichick.cyclic.TeleportFlag.X
+import com.voichick.cyclic.TeleportFlag.Y
+import com.voichick.cyclic.TeleportFlag.Z
 import java.util.concurrent.ConcurrentHashMap
 
 class CyclicAdapter(private val cyclic: Cyclic) : PacketAdapter(cyclic, MAP_CHUNK, UNLOAD_CHUNK, BLOCK_CHANGE, POSITION) {
@@ -35,6 +38,8 @@ class CyclicAdapter(private val cyclic: Cyclic) : PacketAdapter(cyclic, MAP_CHUN
             }
             BLOCK_CHANGE -> duplicateBlockChange(packet)
             POSITION -> {
+                val flags: Set<TeleportFlag> = packet.getSets(TeleportFlag.Converter).read(0)
+                if (X in flags || Y in flags || Z in flags) return
                 val doubles = packet.doubles
                 val x = doubles.read(0)
                 val y = doubles.read(1)

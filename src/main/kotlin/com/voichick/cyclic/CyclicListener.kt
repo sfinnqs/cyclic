@@ -51,12 +51,6 @@ class CyclicListener(private val plugin: Cyclic) : Listener {
         event.setTo(newTo)
         val player = event.player
         plugin.manager.setLocation(player.uniqueId, ImmutableLocation(newTo, player.isOnGround))
-//        // TODO remove
-//        val packet = ProtocolLibrary.getProtocolManager().createPacket(PacketType.Play.Server.NAMED_ENTITY_SPAWN, true)
-//        packet.integers.write(0, Integer.MAX_VALUE)
-//        packet.uuiDs.write(0, event.player.uniqueId)
-//        packet.doubles.write(0, newTo.x).write(1, newTo.y).write(2, newTo.z)
-//        ProtocolLibrary.getProtocolManager().sendServerPacket(event.player, packet)
     }
 
     @EventHandler(priority = HIGHEST)

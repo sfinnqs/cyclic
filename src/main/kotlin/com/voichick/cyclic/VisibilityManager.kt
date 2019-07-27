@@ -6,6 +6,7 @@ import com.comphenix.protocol.events.PacketContainer
 import net.jcip.annotations.ThreadSafe
 import org.bukkit.entity.Player
 import java.util.*
+import java.util.Collections.newSetFromMap
 import java.util.concurrent.locks.ReentrantReadWriteLock
 import kotlin.concurrent.write
 
@@ -18,6 +19,7 @@ class VisibilityManager {
     private val entityIds = mutableMapOf<Duplicate, Int>()
     private val dupMap = mutableMapOf<UUID, MutableSet<Duplicate>>()
     private val seenBy = mutableMapOf<Duplicate, MutableSet<Player>>()
+    private val canSee = WeakHashMap<Player, MutableMap<UUID, MutableSet<Duplicate>>>()
     private val loadedChunks = WeakHashMap<Player, MutableSet<ChunkLocation>>()
 
     fun loadChunk(viewer: Player, chunk: ChunkLocation) {
@@ -25,7 +27,7 @@ class VisibilityManager {
         val packets = mutableListOf<PacketToSend>()
         lock.write {
             val added = loadedChunks.getOrPut(viewer, ::mutableSetOf).add(chunk)
-            assert(added)
+            if (!added) return
             for ((uuid, location) in playerLocs) {
                 val playerChunk = location.chunk
                 if (playerChunk == chunk || !playerChunk.equalsParallel(chunk)) continue
@@ -45,8 +47,8 @@ class VisibilityManager {
     fun unloadChunk(viewer: Player, chunk: ChunkLocation) {
         val packets = mutableListOf<PacketToSend>()
         lock.write {
-            val removed = loadedChunks[viewer]!!.remove(chunk)
-            assert(removed)
+            val removed = loadedChunks[viewer]?.remove(chunk) ?: false
+            if (!removed) return
             for ((uuid, location) in playerLocs) {
                 val playerChunk = location.chunk
                 if (playerChunk == chunk || !playerChunk.equalsParallel(chunk)) continue
@@ -80,7 +82,8 @@ class VisibilityManager {
                 playerLocs.put(uuid, location)
             // TODO concurrent modification
             for ((viewer, chunks) in loadedChunks) {
-                val playerDups = dupMap.getOrDefault(uuid, mutableSetOf())
+                val playerDups = mutableSetOf<Duplicate>()//.apply { addAll(dupMap.getOrDefault(uuid, emptySet<Duplicate>())) }
+                playerDups.addAll(canSee.getOrDefault(viewer, emptyMap<UUID, Set<Duplicate>>()).getOrDefault(uuid, emptySet<Duplicate>()))
                 if (location != null) {
                     val chunk = location.chunk
                     for (loadedChunk in chunks) {
@@ -91,15 +94,19 @@ class VisibilityManager {
                             val newX = location.x + offsetX * MAX_X
                             val newZ = location.z + offsetZ * MAX_Z
                             val newLocation = ImmutableLocation(newX, location.y, newZ, location.yaw, location.pitch, location.grounded)
-                            val packet = if (playerDups.remove(duplicate))
-                                updateDuplicate(duplicate, newLocation, oldLoc!!)
+                            val oldDupX = oldLoc!!.x + offsetX * MAX_X
+                            val oldDupZ = oldLoc.z + offsetZ * MAX_Z
+                            // TODO function to translate ImmutableLocation
+                            val oldDupLoc = ImmutableLocation(oldDupX, oldLoc.y, oldDupZ, oldLoc.yaw, oldLoc.pitch, oldLoc.grounded)
+                            if (playerDups.remove(duplicate))
+                                packets.addAll(updateDuplicate(duplicate, newLocation, oldDupLoc).map { PacketToSend(viewer, it) })
                             else
-                                spawnDuplicate(duplicate, viewer, newLocation)
-                            packets.add(PacketToSend(viewer, packet))
+                                packets.add(PacketToSend(viewer, spawnDuplicate(duplicate, viewer, newLocation)))
                         }
 
                     }
                 }
+                // TODO despawn multiple duplicates in one packet
                 packets.addAll(playerDups.map { PacketToSend(viewer, despawnDuplicate(it, viewer)) })
             }
         }
@@ -109,11 +116,13 @@ class VisibilityManager {
 
     private fun spawnDuplicate(duplicate: Duplicate, viewer: Player, location: ImmutableLocation): PacketContainer {
         // TODO maybe combine the three methods somehow?
-        seenBy.getOrPut(duplicate, ::mutableSetOf).add(viewer)
+        val uuid = duplicate.uuid
+        seenBy.getOrPut(duplicate) { newSetFromMap(WeakHashMap<Player, Boolean>()) }.add(viewer)
+        canSee.getOrPut(viewer, ::mutableMapOf).getOrPut(uuid, ::mutableSetOf).add(duplicate)
         val protocol = ProtocolLibrary.getProtocolManager()
         val packet = protocol.createPacket(NAMED_ENTITY_SPAWN)
-        packet.integers.write(0, getEntityId(duplicate))
-        packet.uuiDs.write(0, duplicate.uuid)
+        packet.integers.write(0, getOrCreateEntityId(duplicate))
+        packet.uuiDs.write(0, uuid)
         val doubles = packet.doubles
         doubles.write(0, location.x)
         doubles.write(1, location.y)
@@ -125,14 +134,21 @@ class VisibilityManager {
         return packet
     }
 
-    private fun updateDuplicate(duplicate: Duplicate, location: ImmutableLocation, oldLocation: ImmutableLocation): PacketContainer {
+    private fun updateDuplicate(duplicate: Duplicate, location: ImmutableLocation, oldLocation: ImmutableLocation): Set<PacketContainer> {
         // TODO velocity
         val protocol = ProtocolLibrary.getProtocolManager()
         val offset = location - oldLocation
         val zeroShort: Short = 0
-        return if (offset == null) {
+        val result = mutableSetOf<PacketContainer>()
+        if (location.yaw != oldLocation.yaw) {
+            val packet = protocol.createPacket(ENTITY_HEAD_ROTATION)
+            packet.integers.write(0, getOrCreateEntityId(duplicate))
+            packet.bytes.write(0, location.yaw)
+            result.add(packet)
+        }
+        if (offset == null) {
             val packet = protocol.createPacket(ENTITY_TELEPORT)
-            packet.integers.write(0, getEntityId(duplicate))
+            packet.integers.write(0, getOrCreateEntityId(duplicate))
             val doubles = packet.doubles
             doubles.write(0, location.x)
             doubles.write(1, location.y)
@@ -141,41 +157,30 @@ class VisibilityManager {
             bytes.write(0, location.yaw)
             bytes.write(1, location.pitch)
             packet.booleans.write(0, location.grounded)
-            packet
+            result.add(packet)
         } else if (offset.deltaX == zeroShort && offset.deltaY == zeroShort && offset.deltaZ == zeroShort) {
-            if (location.yaw == oldLocation.yaw) {
-                if (location.pitch == oldLocation.pitch) {
-                    val packet = protocol.createPacket(ENTITY)
-                    packet.integers.write(0, getEntityId(duplicate))
-                    packet
-                } else {
-                    val packet = protocol.createPacket(ENTITY_HEAD_ROTATION)
-                    packet.integers.write(0, getEntityId(duplicate))
-                    packet.bytes.write(0, location.yaw)
-                    packet
-                }
-            } else {
+            if (location.pitch != oldLocation.pitch) {
                 val packet = protocol.createPacket(ENTITY_LOOK)
-                packet.integers.write(0, getEntityId(duplicate))
+                packet.integers.write(0, getOrCreateEntityId(duplicate))
                 val bytes = packet.bytes
                 bytes.write(0, location.yaw)
                 bytes.write(1, location.pitch)
                 packet.booleans.write(0, location.grounded)
-                packet
+                result.add(packet)
             }
         } else {
             if (location.yaw == oldLocation.yaw && location.pitch == oldLocation.pitch) {
                 val packet = protocol.createPacket(REL_ENTITY_MOVE)
-                packet.integers.write(0, getEntityId(duplicate))
+                packet.integers.write(0, getOrCreateEntityId(duplicate))
                 val shorts = packet.shorts
                 shorts.write(0, offset.deltaX)
                 shorts.write(1, offset.deltaY)
                 shorts.write(2, offset.deltaZ)
                 packet.booleans.write(0, location.grounded)
-                packet
+                result.add(packet)
             } else {
                 val packet = protocol.createPacket(REL_ENTITY_MOVE_LOOK)
-                packet.integers.write(0, getEntityId(duplicate))
+                packet.integers.write(0, getOrCreateEntityId(duplicate))
                 val shorts = packet.shorts
                 shorts.write(0, offset.deltaX)
                 shorts.write(1, offset.deltaY)
@@ -184,41 +189,49 @@ class VisibilityManager {
                 bytes.write(0, location.yaw)
                 bytes.write(1, location.pitch)
                 packet.booleans.write(0, location.grounded)
-                packet
+                result.add(packet)
             }
         }
+        return result
     }
 
     private fun despawnDuplicate(duplicate: Duplicate, viewer: Player): PacketContainer {
         val protocol = ProtocolLibrary.getProtocolManager()
         val packet = protocol.createPacket(ENTITY_DESTROY)
-        packet.integerArrays?.write(0, intArrayOf(getEntityId(duplicate)))
+        val entityId = entityIds[duplicate]!!
+        packet.integerArrays?.write(0, intArrayOf(entityId))
         val viewers = seenBy[duplicate]!!
         val wasSeen = viewers.remove(viewer)
         assert(wasSeen)
+        val uuid = duplicate.uuid
+        // TODO maybe remove key
+        val removedFromCanSee = canSee[viewer]!![uuid]!!.remove(duplicate)
+        assert(removedFromCanSee)
         if (viewers.isEmpty()) {
-            val entityId = entityIds[duplicate]!!
-            dupList[entityId] = null
-            val wasInMap = dupMap[duplicate.uuid]!!.remove(duplicate)
+            entityIds.remove(duplicate)
+            dupList[Int.MAX_VALUE - entityId] = null
+            val wasInMap = dupMap[uuid]!!.remove(duplicate)
             assert(wasInMap)
-            seenBy.remove(duplicate)
+            val removedFromSeenBy = seenBy.remove(duplicate)
+            assert(removedFromSeenBy != null)
         }
         return packet
     }
 
-    private fun getEntityId(duplicate: Duplicate): Int {
+    private fun getOrCreateEntityId(duplicate: Duplicate): Int {
         val existingId = entityIds[duplicate]
-        if (existingId != null) return Int.MAX_VALUE - existingId
-        for (possibleId in 0..dupList.size) {
-            val storedDuplicate = dupList.getOrNull(possibleId)
+        if (existingId != null) return existingId
+        for (i in 0..dupList.size) {
+            val storedDuplicate = dupList.getOrNull(i)
             if (storedDuplicate == null) {
-                if (possibleId == dupList.size)
+                if (i == dupList.size)
                     dupList.add(duplicate)
                 else
-                    dupList[possibleId] = duplicate
-                entityIds[duplicate] = possibleId
+                    dupList[i] = duplicate
+                val entityId = Int.MAX_VALUE - i
+                entityIds[duplicate] = entityId
                 dupMap.getOrPut(duplicate.uuid, ::mutableSetOf).add(duplicate)
-                return Int.MAX_VALUE - possibleId
+                return entityId
             }
         }
         // TODO more elegant way?
