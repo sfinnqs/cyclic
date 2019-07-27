@@ -11,7 +11,7 @@ import java.lang.Math.floorMod
 import java.util.*
 import java.util.concurrent.ConcurrentHashMap
 
-class CyclicAdapter(private val cyclic: Cyclic) : PacketAdapter(cyclic, MAP_CHUNK, UNLOAD_CHUNK, BLOCK_CHANGE) {
+class CyclicAdapter(private val cyclic: Cyclic) : PacketAdapter(cyclic, MAP_CHUNK, UNLOAD_CHUNK, BLOCK_CHANGE, POSITION) {
 
     private val customPackets = Collections.newSetFromMap(MapMaker().weakKeys().makeMap<Any, Boolean>())
 
@@ -25,17 +25,27 @@ class CyclicAdapter(private val cyclic: Cyclic) : PacketAdapter(cyclic, MAP_CHUN
                 val ints = packet.integers
                 val x = ints.read(0)
                 val z = ints.read(1)
-                cyclic.loadedChunks.getOrPut(player) {
-                    ConcurrentHashMap.newKeySet()
-                }.add(ChunkLocation(x, z))
+                cyclic.manager.loadChunk(player, ChunkLocation(x, z))
             }
             UNLOAD_CHUNK -> {
                 val ints = packet.integers
                 val x = ints.read(0)
                 val z = ints.read(1)
-                cyclic.loadedChunks[player]?.remove(ChunkLocation(x, z))
+                cyclic.manager.unloadChunk(player, ChunkLocation(x, z))
             }
             BLOCK_CHANGE -> duplicateBlockChange(packet)
+            POSITION -> {
+                val doubles = packet.doubles
+                val x = doubles.read(0)
+                val y = doubles.read(1)
+                val z = doubles.read(2)
+                val floats = packet.float
+                val yaw = floats.read(0)
+                val pitch = floats.read(1)
+                val location = ImmutableLocation(x, y, z, yaw, pitch, false)
+                // TODO this is technically unsafe
+                cyclic.manager.setLocation(player.uniqueId, location)
+            }
         }
     }
 
@@ -50,7 +60,7 @@ class CyclicAdapter(private val cyclic: Cyclic) : PacketAdapter(cyclic, MAP_CHUN
         val srcZ = floorMod(chunkZ, Z_CHUNKS)
         // TODO world-specific
         for (player in cyclic.server.onlinePlayers) {
-            val chunks = cyclic.loadedChunks[player] ?: continue
+            val chunks = cyclic.manager.getLoadedChunks(player)
             for (otherChunk in chunks) {
                 if (otherChunk.x == chunkX && otherChunk.z == chunkZ) continue
                 if (floorMod(otherChunk.x, X_CHUNKS) != srcX) continue

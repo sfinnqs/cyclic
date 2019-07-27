@@ -16,20 +16,8 @@ class CyclicGenerator : ChunkGenerator() {
             for (localZ in 0..15)
                 biome.setBiome(localX, localZ, Biome.PLAINS)
         val result = createChunkData(world)
-        if (x < 0 || x >= X_CHUNKS || z < 0 || z >= Z_CHUNKS) {
-//            val sourceX = floorMod(x, X_CHUNKS)
-//            val sourceZ = floorMod(z, Z_CHUNKS)
-//            if (!world.isChunkGenerated(sourceX, sourceZ))
-//                return result
-//            val sourceChunk = world.getChunkAt(sourceX, sourceZ)
-//            for (localX in 0..15)
-//                for (localY in 0 until result.maxHeight)
-//                    for (localZ in 0..15) {
-//                        val data = sourceChunk.getBlock(localX, localY, localZ).blockData
-//                        result.setBlock(localX, localY, localZ, data)
-//                    }
+        if (x !in 0 until X_CHUNKS || z !in 0 until Z_CHUNKS)
             return result
-        }
         result.setRegion(0, 0, 0, 16, 1, 16, Material.BEDROCK)
         result.setRegion(0, 1, 0, 16, 60, 16, Material.STONE)
         result.setRegion(0, 60, 0, 16, 63, 16, Material.DIRT)

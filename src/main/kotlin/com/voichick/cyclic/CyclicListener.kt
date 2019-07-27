@@ -1,5 +1,7 @@
 package com.voichick.cyclic
 
+import com.comphenix.protocol.PacketType
+import com.comphenix.protocol.ProtocolLibrary
 import net.jcip.annotations.NotThreadSafe
 import org.bukkit.Location
 import org.bukkit.block.Block
@@ -8,6 +10,8 @@ import org.bukkit.event.EventHandler
 import org.bukkit.event.EventPriority.HIGHEST
 import org.bukkit.event.EventPriority.LOWEST
 import org.bukkit.event.Listener
+import org.bukkit.event.player.PlayerJoinEvent
+import org.bukkit.event.player.PlayerMoveEvent
 import org.bukkit.event.player.PlayerQuitEvent
 import org.bukkit.event.player.PlayerTeleportEvent
 import org.bukkit.event.world.ChunkLoadEvent
@@ -29,15 +33,38 @@ class CyclicListener(private val plugin: Cyclic) : Listener {
         (srcChunk as? CraftChunk)?.handle?.sections?.copyInto(targetSections)
     }
 
+    @EventHandler(priority = LOWEST)
+    fun onPlayerJoin(event: PlayerJoinEvent) {
+        val player = event.player
+        plugin.manager.setLocation(player.uniqueId, ImmutableLocation(player))
+    }
+
+    @EventHandler(priority = HIGHEST, ignoreCancelled = true)
+    fun onPlayerMove(event: PlayerMoveEvent) {
+        val player = event.player
+        plugin.manager.setLocation(player.uniqueId, ImmutableLocation(player))
+    }
+
     @EventHandler(priority = LOWEST, ignoreCancelled = true)
     fun onPlayerTeleport(event: PlayerTeleportEvent) {
         val newTo = event.to?.representative ?: return
         event.setTo(newTo)
+        val player = event.player
+        plugin.manager.setLocation(player.uniqueId, ImmutableLocation(newTo, player.isOnGround))
+//        // TODO remove
+//        val packet = ProtocolLibrary.getProtocolManager().createPacket(PacketType.Play.Server.NAMED_ENTITY_SPAWN, true)
+//        packet.integers.write(0, Integer.MAX_VALUE)
+//        packet.uuiDs.write(0, event.player.uniqueId)
+//        packet.doubles.write(0, newTo.x).write(1, newTo.y).write(2, newTo.z)
+//        ProtocolLibrary.getProtocolManager().sendServerPacket(event.player, packet)
     }
 
     @EventHandler(priority = HIGHEST)
     fun onPlayerQuit(event: PlayerQuitEvent) {
-        event.player.teleport(event.player.location.representative)
+        val player = event.player
+        event.player.teleport(player.location.representative)
+        plugin.manager.unloadAllChunks(player)
+        plugin.manager.setLocation(player.uniqueId, null)
     }
 
     @EventHandler(priority = HIGHEST)

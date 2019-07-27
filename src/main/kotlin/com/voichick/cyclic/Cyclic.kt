@@ -10,7 +10,7 @@ import org.bukkit.plugin.java.JavaPlugin
 @NotThreadSafe
 class Cyclic : JavaPlugin() {
 
-    val loadedChunks: MutableMap<Player, MutableSet<ChunkLocation>> = MapMaker().weakKeys().makeMap()
+    val manager = VisibilityManager()
 
     override fun onEnable() {
         server.pluginManager.registerEvents(CyclicListener(this), this)
