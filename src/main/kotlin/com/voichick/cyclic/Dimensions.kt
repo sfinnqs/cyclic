@@ -3,7 +3,7 @@ package com.voichick.cyclic
 import org.bukkit.util.NumberConversions.floor
 import java.lang.Math.floorMod
 
-const val X_CHUNKS = 4
+const val X_CHUNKS = 3
 const val Z_CHUNKS = 3
 
 const val MAX_X = X_CHUNKS * 16
