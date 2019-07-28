@@ -3,6 +3,7 @@ package com.voichick.cyclic
 import com.comphenix.protocol.PacketType.Play.Server.*
 import com.comphenix.protocol.ProtocolLibrary
 import com.comphenix.protocol.events.PacketContainer
+import com.comphenix.protocol.wrappers.WrappedDataWatcher
 import net.jcip.annotations.ThreadSafe
 import org.bukkit.entity.Player
 import java.util.*
@@ -130,7 +131,15 @@ class VisibilityManager {
         val bytes = packet.bytes
         bytes.write(0, location.yaw)
         bytes.write(1, location.pitch)
-        // TODO metadata
+
+        // https://www.spigotmc.org/threads/metadata-protocollib.251684/#post-2513571
+        val watcher = WrappedDataWatcher()
+        watcher.entity = viewer
+        val serializer = WrappedDataWatcher.Registry.get(java.lang.Byte::class.java)
+        val skinParts: Byte = 0x7f
+        watcher.setObject(15, serializer, skinParts)
+        packet.dataWatcherModifier.write(0, watcher)
+
         return packet
     }
 

@@ -1,5 +1,6 @@
 package com.voichick.cyclic
 
+import com.comphenix.protocol.PacketType.Play.Client.SETTINGS
 import com.comphenix.protocol.PacketType.Play.Server.*
 import com.comphenix.protocol.ProtocolLibrary
 import com.comphenix.protocol.events.PacketAdapter
@@ -18,9 +19,8 @@ class CyclicAdapter(private val cyclic: Cyclic) : PacketAdapter(cyclic, MAP_CHUN
 
     private val customPackets = Collections.newSetFromMap(MapMaker().weakKeys().makeMap<Any, Boolean>())
 
-    override fun onPacketSending(event: PacketEvent?) {
-        if (event == null) return
-        val packet = event.packet ?: return
+    override fun onPacketSending(event: PacketEvent) {
+        val packet = event.packet
         if (packet.handle in customPackets) return
         val player = event.player ?: return
         when (event.packetType) {
