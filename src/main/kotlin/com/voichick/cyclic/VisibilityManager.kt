@@ -81,10 +81,9 @@ class VisibilityManager {
                 playerLocs.remove(uuid)
             else
                 playerLocs.put(uuid, location)
-            // TODO concurrent modification
             for ((viewer, chunks) in loadedChunks) {
-                val playerDups = mutableSetOf<Duplicate>()//.apply { addAll(dupMap.getOrDefault(uuid, emptySet<Duplicate>())) }
-                playerDups.addAll(canSee.getOrDefault(viewer, emptyMap<UUID, Set<Duplicate>>()).getOrDefault(uuid, emptySet<Duplicate>()))
+                val playerDups = mutableSetOf<Duplicate>()
+                playerDups.addAll(canSee.getOrDefault(viewer, emptyMap<UUID, Set<Duplicate>>()).getOrDefault(uuid, emptySet()))
                 if (location != null) {
                     val chunk = location.chunk
                     for (loadedChunk in chunks) {
@@ -95,14 +94,15 @@ class VisibilityManager {
                             val newX = location.x + offsetX * MAX_X
                             val newZ = location.z + offsetZ * MAX_Z
                             val newLocation = ImmutableLocation(newX, location.y, newZ, location.yaw, location.pitch, location.grounded)
-                            val oldDupX = oldLoc!!.x + offsetX * MAX_X
-                            val oldDupZ = oldLoc.z + offsetZ * MAX_Z
-                            // TODO function to translate ImmutableLocation
-                            val oldDupLoc = ImmutableLocation(oldDupX, oldLoc.y, oldDupZ, oldLoc.yaw, oldLoc.pitch, oldLoc.grounded)
-                            if (playerDups.remove(duplicate))
+                            if (playerDups.remove(duplicate)) {
+                                val oldDupX = oldLoc!!.x + offsetX * MAX_X
+                                val oldDupZ = oldLoc.z + offsetZ * MAX_Z
+                                // TODO function to translate ImmutableLocation
+                                val oldDupLoc = ImmutableLocation(oldDupX, oldLoc.y, oldDupZ, oldLoc.yaw, oldLoc.pitch, oldLoc.grounded)
                                 packets.addAll(updateDuplicate(duplicate, newLocation, oldDupLoc).map { PacketToSend(viewer, it) })
-                            else
+                            } else {
                                 packets.add(PacketToSend(viewer, spawnDuplicate(duplicate, viewer, newLocation)))
+                            }
                         }
 
                     }
