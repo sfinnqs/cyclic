@@ -14,8 +14,7 @@ import org.bukkit.craftbukkit.v1_14_R1.CraftChunk
 import org.bukkit.event.EventHandler
 import org.bukkit.event.EventPriority.*
 import org.bukkit.event.Listener
-import org.bukkit.event.block.BlockBreakEvent
-import org.bukkit.event.block.BlockPlaceEvent
+import org.bukkit.event.block.*
 import org.bukkit.event.player.PlayerJoinEvent
 import org.bukkit.event.player.PlayerMoveEvent
 import org.bukkit.event.player.PlayerQuitEvent
@@ -65,14 +64,74 @@ class CyclicListener(private val plugin: Cyclic) : Listener {
     @EventHandler(priority = MONITOR, ignoreCancelled = true)
     fun onBlockBreak(event: BlockBreakEvent) {
         val block = event.block
+        // TODO waterlogged
         sendBlockUpdate(block.x, block.y, block.z, Material.AIR.createBlockData())
     }
 
     @EventHandler(priority = MONITOR, ignoreCancelled = true)
     fun onBlockPlace(event: BlockPlaceEvent) {
         val block = event.blockPlaced
-        val data = block.blockData.clone()
-        sendBlockUpdate(block.x, block.y, block.z, data)
+        sendBlockUpdate(block.x, block.y, block.z, block.blockData)
+    }
+
+    @EventHandler(priority = MONITOR, ignoreCancelled = true)
+    fun onBlockIgnite(event: BlockIgniteEvent) {
+        val block = event.block
+        sendBlockUpdate(block.x, block.y, block.z, Material.FIRE.createBlockData())
+    }
+
+    @EventHandler(priority = HIGHEST, ignoreCancelled = true)
+    fun onBlockBurn(event: BlockBurnEvent) {
+        val block = event.block
+        if (block.isRepresentative)
+            sendBlockUpdate(block.x, block.y, block.z, Material.AIR.createBlockData())
+        else
+            event.isCancelled = true
+    }
+
+    @EventHandler(priority = HIGHEST, ignoreCancelled = true)
+    fun onBlockFade(event: BlockFadeEvent) {
+        val block = event.block
+        if (block.isRepresentative)
+            sendBlockUpdate(block.x, block.y, block.z, event.newState.blockData)
+        else
+            event.isCancelled = true
+    }
+
+    @EventHandler(priority = HIGHEST, ignoreCancelled = true)
+    fun onBlockGrow(event: BlockGrowEvent) {
+        val block = event.block
+        if (block.isRepresentative)
+            sendBlockUpdate(block.x, block.y, block.z, event.newState.blockData)
+        else
+            event.isCancelled = true
+    }
+
+    @EventHandler(priority = HIGHEST, ignoreCancelled = true)
+    fun onLeavesDecay(event: LeavesDecayEvent) {
+        val block = event.block
+        if (block.isRepresentative)
+            sendBlockUpdate(block.x, block.y, block.z, Material.AIR.createBlockData())
+        else
+            event.isCancelled = true
+    }
+
+    @EventHandler(priority = HIGHEST, ignoreCancelled = true)
+    fun onBlockSpread(event: BlockSpreadEvent) {
+        val block = event.block
+        if (block.isRepresentative)
+            sendBlockUpdate(block.x, block.y, block.z, event.source.blockData)
+        else
+            event.isCancelled = true
+    }
+
+    @EventHandler(priority = HIGHEST, ignoreCancelled = true)
+    fun onBlockForm(event: BlockFormEvent) {
+        val block = event.block
+        if (block.isRepresentative)
+            sendBlockUpdate(block.x, block.y, block.z, event.newState.blockData)
+        else
+            event.isCancelled = true
     }
 
     @EventHandler(priority = HIGHEST)
@@ -87,6 +146,9 @@ class CyclicListener(private val plugin: Cyclic) : Listener {
             val offsetZ = blockZ - floorMod(blockZ, MAX_Z)
             return subtract(offsetX.toDouble(), 0.0, offsetZ.toDouble())
         }
+
+    private val Block.isRepresentative
+        get() = x in 0 until MAX_X && z in 0 until MAX_Z
 
     private fun pointChunk(chunk: Chunk) {
         val x = chunk.x
