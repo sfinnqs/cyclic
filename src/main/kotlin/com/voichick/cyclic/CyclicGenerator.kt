@@ -5,7 +5,6 @@ import org.bukkit.Material
 import org.bukkit.World
 import org.bukkit.block.Biome
 import org.bukkit.generator.ChunkGenerator
-import java.lang.Math.floorMod
 import java.util.*
 
 class CyclicGenerator : ChunkGenerator() {

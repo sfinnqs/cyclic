@@ -9,6 +9,7 @@ import org.bukkit.entity.Player
 import java.util.*
 import java.util.Collections.newSetFromMap
 import java.util.concurrent.locks.ReentrantReadWriteLock
+import kotlin.concurrent.read
 import kotlin.concurrent.write
 
 // TODO this is a mess
@@ -46,18 +47,8 @@ class VisibilityManager {
     }
 
     fun unloadChunk(viewer: Player, chunk: ChunkLocation) {
-        val packets = mutableListOf<PacketToSend>()
-        lock.write {
-            val removed = loadedChunks[viewer]?.remove(chunk) ?: false
-            if (!removed) return
-            for ((uuid, location) in playerLocs) {
-                val playerChunk = location.chunk
-                if (playerChunk == chunk || !playerChunk.equalsParallel(chunk)) continue
-                val offsetX = (chunk.x - playerChunk.x) / X_CHUNKS
-                val offsetZ = (chunk.z - playerChunk.z) / Z_CHUNKS
-                val duplicate = Duplicate(uuid, offsetX, offsetZ)
-                packets.add(PacketToSend(viewer, despawnDuplicate(duplicate, viewer)))
-            }
+        val packets = lock.write {
+            unloadPackets(viewer, chunk)
         }
         for (packet in packets)
             ProtocolLibrary.getProtocolManager().sendServerPacket(packet.viewer, packet.packet)
@@ -65,13 +56,20 @@ class VisibilityManager {
 
     fun unloadAllChunks(viewer: Player) {
         // TODO a cleaner solution
-        val chunks = loadedChunks[viewer] ?: return
-        for (chunk in chunks.toList())
-            unloadChunk(viewer, chunk)
+        val packets = lock.write {
+            getLoadedChunks(viewer).flatMap { unloadPackets(viewer, it) }
+        }
+        for (packet in packets)
+            ProtocolLibrary.getProtocolManager().sendServerPacket(packet.viewer, packet.packet)
     }
 
     fun getLoadedChunks(viewer: Player): Set<ChunkLocation> {
-        return loadedChunks[viewer] ?: emptySet()
+        lock.read {
+            val viewerChunks = loadedChunks[viewer] ?: return emptySet()
+            val result = mutableSetOf<ChunkLocation>()
+            result.addAll(viewerChunks)
+            return result.toSet()
+        }
     }
 
     fun setLocation(uuid: UUID, location: ImmutableLocation?) {
@@ -115,6 +113,21 @@ class VisibilityManager {
             ProtocolLibrary.getProtocolManager().sendServerPacket(packet.viewer, packet.packet)
     }
 
+    private fun unloadPackets(viewer: Player, chunk: ChunkLocation): List<PacketToSend> {
+        val result = mutableListOf<PacketToSend>()
+        val removed = loadedChunks[viewer]?.remove(chunk) ?: false
+        if (!removed) return emptyList()
+        for ((uuid, location) in playerLocs) {
+            val playerChunk = location.chunk
+            if (playerChunk == chunk || !playerChunk.equalsParallel(chunk)) continue
+            val offsetX = (chunk.x - playerChunk.x) / X_CHUNKS
+            val offsetZ = (chunk.z - playerChunk.z) / Z_CHUNKS
+            val duplicate = Duplicate(uuid, offsetX, offsetZ)
+            result.add(PacketToSend(viewer, despawnDuplicate(duplicate, viewer)))
+        }
+        return result
+    }
+
     private fun spawnDuplicate(duplicate: Duplicate, viewer: Player, location: ImmutableLocation): PacketContainer {
         // TODO maybe combine the three methods somehow?
         val uuid = duplicate.uuid
@@ -143,18 +156,12 @@ class VisibilityManager {
         return packet
     }
 
-    private fun updateDuplicate(duplicate: Duplicate, location: ImmutableLocation, oldLocation: ImmutableLocation): Set<PacketContainer> {
+    private fun updateDuplicate(duplicate: Duplicate, location: ImmutableLocation, oldLocation: ImmutableLocation): List<PacketContainer> {
         // TODO velocity
         val protocol = ProtocolLibrary.getProtocolManager()
         val offset = location - oldLocation
         val zeroShort: Short = 0
-        val result = mutableSetOf<PacketContainer>()
-        if (location.yaw != oldLocation.yaw) {
-            val packet = protocol.createPacket(ENTITY_HEAD_ROTATION)
-            packet.integers.write(0, getOrCreateEntityId(duplicate))
-            packet.bytes.write(0, location.yaw)
-            result.add(packet)
-        }
+        val result = mutableListOf<PacketContainer>()
         if (offset == null) {
             val packet = protocol.createPacket(ENTITY_TELEPORT)
             packet.integers.write(0, getOrCreateEntityId(duplicate))
@@ -200,6 +207,12 @@ class VisibilityManager {
                 packet.booleans.write(0, location.grounded)
                 result.add(packet)
             }
+        }
+        if (location.yaw != oldLocation.yaw) {
+            val packet = protocol.createPacket(ENTITY_HEAD_ROTATION)
+            packet.integers.write(0, getOrCreateEntityId(duplicate))
+            packet.bytes.write(0, location.yaw)
+            result.add(packet)
         }
         return result
     }
