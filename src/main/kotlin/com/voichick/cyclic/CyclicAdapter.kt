@@ -1,15 +1,23 @@
 package com.voichick.cyclic
 
 import com.comphenix.protocol.PacketType.Play.Server.*
+import com.comphenix.protocol.ProtocolLibrary
 import com.comphenix.protocol.events.PacketAdapter
+import com.comphenix.protocol.events.PacketContainer
 import com.comphenix.protocol.events.PacketEvent
+import com.comphenix.protocol.wrappers.EnumWrappers
 import com.google.common.collect.MapMaker
-import com.voichick.cyclic.TeleportFlag.*
+import org.bukkit.entity.Player
 import java.util.*
+import java.util.concurrent.locks.ReentrantLock
+import kotlin.concurrent.withLock
 
-class CyclicAdapter(private val cyclic: Cyclic) : PacketAdapter(cyclic, MAP_CHUNK, UNLOAD_CHUNK, BLOCK_CHANGE, POSITION) {
+class CyclicAdapter(private val cyclic: Cyclic) : PacketAdapter(cyclic, MAP_CHUNK, UNLOAD_CHUNK, NAMED_ENTITY_SPAWN, PLAYER_INFO) {
 
     private val customPackets = Collections.newSetFromMap(MapMaker().weakKeys().makeMap<Any, Boolean>())
+    private val lock = ReentrantLock()
+    private val knownUuids = WeakHashMap<Player, MutableSet<UUID>>()
+    private val spawnQueue = WeakHashMap<Player, MutableMap<UUID, Queue<PacketContainer>>>()
 
     override fun onPacketSending(event: PacketEvent) {
         val packet = event.packet
@@ -28,20 +36,46 @@ class CyclicAdapter(private val cyclic: Cyclic) : PacketAdapter(cyclic, MAP_CHUN
                 val z = ints.read(1)
                 cyclic.manager.unloadChunk(player, ChunkLocation(x, z))
             }
-            POSITION -> {
-                val flags: Set<TeleportFlag> = packet.getSets(TeleportFlag.Converter).read(0)
-                if (X in flags || Y in flags || Z in flags) return
-                val doubles = packet.doubles
-                val x = doubles.read(0)
-                val y = doubles.read(1)
-                val z = doubles.read(2)
-                val floats = packet.float
-                val yaw = floats.read(0)
-                val pitch = floats.read(1)
-                val location = ImmutableLocation(x, y, z, yaw, pitch, false)
-                // TODO this is technically unsafe
-                cyclic.manager.setLocation(player.uniqueId, location)
+            NAMED_ENTITY_SPAWN -> {
+                val uuid = packet.uuiDs.read(0)
+                lock.withLock {
+                    if (uuid in knownUuids[player].orEmpty()) return
+                    spawnQueue.getOrPut(player, ::mutableMapOf).getOrPut(uuid, ::LinkedList).add(packet)
+                    event.isCancelled = true
+                }
+            }
+            PLAYER_INFO -> {
+                val uuids = packet.playerInfoDataLists.read(0).map { it.profile.uuid }
+                when (packet.playerInfoAction.read(0)) {
+                    EnumWrappers.PlayerInfoAction.ADD_PLAYER -> {
+                        val packets = mutableListOf<PacketContainer>()
+                        lock.withLock {
+                            knownUuids.getOrPut(player, ::mutableSetOf).addAll(uuids)
+                            val queues = spawnQueue[player] ?: return
+                            for (uuid in uuids) {
+                                val queue = queues.remove(uuid) ?: continue
+                                packets.addAll(queue)
+                                if (queues.isEmpty())
+                                    spawnQueue.remove(player)
+                            }
+                        }
+                        if (packets.isEmpty()) return
+                        event.isCancelled = true
+                        customPackets.add(packet.handle)
+                        val protocol = ProtocolLibrary.getProtocolManager()
+                        protocol.sendServerPacket(player, packet)
+                        for (toSend in packets)
+                            protocol.sendServerPacket(player, toSend)
+                    }
+                    EnumWrappers.PlayerInfoAction.REMOVE_PLAYER -> {
+                        lock.withLock {
+                            knownUuids[player]?.removeAll(uuids)
+                        }
+                    }
+                    else -> return
+                }
             }
         }
+
     }
 }
