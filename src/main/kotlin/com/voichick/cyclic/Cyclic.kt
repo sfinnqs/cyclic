@@ -1,9 +1,8 @@
 package com.voichick.cyclic
 
 import com.comphenix.protocol.ProtocolLibrary
-import com.google.common.collect.MapMaker
+import com.voichick.cyclic.gen.CyclicGenerator
 import net.jcip.annotations.NotThreadSafe
-import org.bukkit.entity.Player
 import org.bukkit.plugin.java.JavaPlugin
 
 @Suppress("unused")

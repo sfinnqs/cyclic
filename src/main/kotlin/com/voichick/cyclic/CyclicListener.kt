@@ -5,11 +5,15 @@ import com.comphenix.protocol.ProtocolLibrary
 import com.comphenix.protocol.wrappers.BlockPosition
 import com.comphenix.protocol.wrappers.WrappedBlockData
 import net.jcip.annotations.NotThreadSafe
-import org.bukkit.Chunk
 import org.bukkit.Location
 import org.bukkit.Material
+import org.bukkit.Material.*
 import org.bukkit.block.Block
+import org.bukkit.block.BlockFace.DOWN
+import org.bukkit.block.data.AnaloguePowerable
 import org.bukkit.block.data.BlockData
+import org.bukkit.block.data.Levelled
+import org.bukkit.block.data.Waterlogged
 import org.bukkit.craftbukkit.v1_14_R1.CraftChunk
 import org.bukkit.event.EventHandler
 import org.bukkit.event.EventPriority.*
@@ -30,7 +34,40 @@ class CyclicListener(private val plugin: Cyclic) : Listener {
 
     @EventHandler(priority = LOWEST)
     fun onChunkLoad(event: ChunkLoadEvent) {
-        pointChunk(event.chunk)
+        val chunk = event.chunk
+        val x = chunk.x
+        val z = chunk.z
+        if (chunk.location.isRepresentative) {
+            chunk.isForceLoaded = true
+            return
+        }
+        chunk.isForceLoaded = false
+        val source = chunk.world.getChunkAt(floorMod(x, X_CHUNKS), floorMod(z, Z_CHUNKS))
+        val sourceSections = (source as CraftChunk).handle.sections
+        if ((chunk as CraftChunk).handle.sections === sourceSections) return
+
+        // https://stackoverflow.com/a/3301720
+        val field = net.minecraft.server.v1_14_R1.Chunk::class.java.getDeclaredField("sections")
+        val accessible = field.isAccessible
+        field.isAccessible = true
+        try {
+            val modifiersField = Field::class.java.getDeclaredField("modifiers")
+            val modifiersAccessible = modifiersField.isAccessible
+            modifiersField.isAccessible = true
+            try {
+                val modifiers = field.modifiers
+                modifiersField.setInt(field, modifiers and FINAL.inv())
+                try {
+                    field.set((chunk as CraftChunk).handle, sourceSections)
+                } finally {
+                    modifiersField.setInt(field, modifiers)
+                }
+            } finally {
+                modifiersField.isAccessible = modifiersAccessible
+            }
+        } finally {
+            field.isAccessible = accessible
+        }
     }
 
     @EventHandler(priority = LOWEST)
@@ -64,27 +101,58 @@ class CyclicListener(private val plugin: Cyclic) : Listener {
     @EventHandler(priority = MONITOR, ignoreCancelled = true)
     fun onBlockBreak(event: BlockBreakEvent) {
         val block = event.block
-        // TODO waterlogged
-        sendBlockUpdate(block.x, block.y, block.z, Material.AIR.createBlockData())
+        val type = if ((block.blockData as? Waterlogged)?.isWaterlogged == true)
+            WATER
+        else
+            AIR
+        sendBlockUpdate(block, type.createBlockData())
     }
 
     @EventHandler(priority = MONITOR, ignoreCancelled = true)
     fun onBlockPlace(event: BlockPlaceEvent) {
         val block = event.blockPlaced
-        sendBlockUpdate(block.x, block.y, block.z, block.blockData)
+        sendBlockUpdate(block, block.blockData)
     }
 
     @EventHandler(priority = MONITOR, ignoreCancelled = true)
-    fun onBlockIgnite(event: BlockIgniteEvent) {
+    fun onBlockFromTo(event: BlockFromToEvent) {
+        val to = event.toBlock
+        val from = event.block
+        val fromData = from.blockData
+        if (fromData is Levelled) {
+            val fromLevel = fromData.level
+            val toData = fromData.clone() as Levelled
+            toData.level = when {
+                event.face == DOWN -> fromLevel % 8 + 8
+                fromLevel < 8 -> fromLevel + 1
+                else -> 1
+            }
+            sendBlockUpdate(to, toData)
+        } else if (fromData.material == DRAGON_EGG) {
+            sendBlockUpdate(from, AIR.createBlockData())
+            sendBlockUpdate(to, fromData)
+        }
+    }
+
+    @EventHandler(priority = MONITOR, ignoreCancelled = true)
+    fun onFluidLevelChange(event: FluidLevelChangeEvent) {
         val block = event.block
-        sendBlockUpdate(block.x, block.y, block.z, Material.FIRE.createBlockData())
+        sendBlockUpdate(block, event.newData)
+    }
+
+    @EventHandler(priority = MONITOR, ignoreCancelled = true)
+    fun onBlockRedstone(event: BlockRedstoneEvent) {
+        val block = event.block
+        val data = block.blockData.clone() as? AnaloguePowerable ?: return
+        data.power = event.newCurrent
+        sendBlockUpdate(block, data)
     }
 
     @EventHandler(priority = HIGHEST, ignoreCancelled = true)
     fun onBlockBurn(event: BlockBurnEvent) {
         val block = event.block
         if (block.isRepresentative)
-            sendBlockUpdate(block.x, block.y, block.z, Material.AIR.createBlockData())
+            sendBlockUpdate(block, Material.AIR.createBlockData())
         else
             event.isCancelled = true
     }
@@ -93,7 +161,7 @@ class CyclicListener(private val plugin: Cyclic) : Listener {
     fun onBlockFade(event: BlockFadeEvent) {
         val block = event.block
         if (block.isRepresentative)
-            sendBlockUpdate(block.x, block.y, block.z, event.newState.blockData)
+            sendBlockUpdate(block, event.newState.blockData)
         else
             event.isCancelled = true
     }
@@ -102,7 +170,7 @@ class CyclicListener(private val plugin: Cyclic) : Listener {
     fun onBlockGrow(event: BlockGrowEvent) {
         val block = event.block
         if (block.isRepresentative)
-            sendBlockUpdate(block.x, block.y, block.z, event.newState.blockData)
+            sendBlockUpdate(block, event.newState.blockData)
         else
             event.isCancelled = true
     }
@@ -111,7 +179,7 @@ class CyclicListener(private val plugin: Cyclic) : Listener {
     fun onLeavesDecay(event: LeavesDecayEvent) {
         val block = event.block
         if (block.isRepresentative)
-            sendBlockUpdate(block.x, block.y, block.z, Material.AIR.createBlockData())
+            sendBlockUpdate(block, Material.AIR.createBlockData())
         else
             event.isCancelled = true
     }
@@ -120,7 +188,7 @@ class CyclicListener(private val plugin: Cyclic) : Listener {
     fun onBlockSpread(event: BlockSpreadEvent) {
         val block = event.block
         if (block.isRepresentative)
-            sendBlockUpdate(block.x, block.y, block.z, event.source.blockData)
+            sendBlockUpdate(block, event.newState.blockData)
         else
             event.isCancelled = true
     }
@@ -129,7 +197,7 @@ class CyclicListener(private val plugin: Cyclic) : Listener {
     fun onBlockForm(event: BlockFormEvent) {
         val block = event.block
         if (block.isRepresentative)
-            sendBlockUpdate(block.x, block.y, block.z, event.newState.blockData)
+            sendBlockUpdate(block, event.newState.blockData)
         else
             event.isCancelled = true
     }
@@ -137,7 +205,7 @@ class CyclicListener(private val plugin: Cyclic) : Listener {
     @EventHandler(priority = HIGHEST)
     fun onChunkUnload(event: ChunkUnloadEvent) {
         val chunk = event.chunk
-        event.isSaveChunk = chunk.x in 0 until X_CHUNKS && chunk.z in 0 until Z_CHUNKS
+        event.isSaveChunk = chunk.location.isRepresentative
     }
 
     private val Location.representative: Location
@@ -147,75 +215,23 @@ class CyclicListener(private val plugin: Cyclic) : Listener {
             return subtract(offsetX.toDouble(), 0.0, offsetZ.toDouble())
         }
 
-    private val Block.isRepresentative
-        get() = x in 0 until MAX_X && z in 0 until MAX_Z
-
-    private fun pointChunk(chunk: Chunk) {
-        val x = chunk.x
-        val z = chunk.z
-        if (x in 0 until X_CHUNKS && z in 0 until Z_CHUNKS) return
-        val source = chunk.world.getChunkAt(floorMod(x, X_CHUNKS), floorMod(z, Z_CHUNKS))
-        val sourceSections = (source as CraftChunk).handle.sections
-        if ((chunk as CraftChunk).handle.sections === sourceSections) return
-
-        // https://stackoverflow.com/a/3301720
-        val field = net.minecraft.server.v1_14_R1.Chunk::class.java.getDeclaredField("sections")
-        val accessible = field.isAccessible
-        field.isAccessible = true
-        try {
-            val modifiersField = Field::class.java.getDeclaredField("modifiers")
-            val modifiersAccessible = modifiersField.isAccessible
-            modifiersField.isAccessible = true
-            try {
-                val modifiers = field.modifiers
-                modifiersField.setInt(field, modifiers and FINAL.inv())
-                try {
-                    field.set((chunk as CraftChunk).handle, sourceSections)
-                } finally {
-                    modifiersField.setInt(field, modifiers)
-                }
-            } finally {
-                modifiersField.isAccessible = modifiersAccessible
-            }
-        } finally {
-            field.isAccessible = accessible
-        }
-    }
-
-    private fun sendBlockUpdate(x: Int, y: Int, z: Int, data: BlockData) {
+    private fun sendBlockUpdate(block: Block, data: BlockData) {
+        val x = block.x
+        val z = block.z
         val chunk = ChunkLocation(x shr 4, z shr 4)
         val protocol = ProtocolLibrary.getProtocolManager()
-        val packet = protocol.createPacket(BLOCK_CHANGE)
-        packet.blockData.write(0, WrappedBlockData.createData(data))
         for (player in plugin.server.onlinePlayers) {
             val chunks = plugin.manager.getLoadedChunks(player)
             for (otherChunk in chunks) {
                 if (otherChunk == chunk || !otherChunk.equalsParallel(chunk)) continue
+                val packet = protocol.createPacket(BLOCK_CHANGE)
+                packet.blockData.write(0, WrappedBlockData.createData(data))
                 val newX = x + ((otherChunk.x - chunk.x) shl 4)
                 val newZ = z + ((otherChunk.z - chunk.z) shl 4)
-                val newPosition = BlockPosition(newX, y, newZ)
-                val newPacket = packet.deepClone()
-                newPacket.blockPositionModifier.write(0, newPosition)
-                protocol.sendServerPacket(player, newPacket)
+                val newPosition = BlockPosition(newX, block.y, newZ)
+                packet.blockPositionModifier.write(0, newPosition)
+                protocol.sendServerPacket(player, packet)
             }
         }
     }
-
-    private val Block.parallelBlocks: Set<Block>
-        get() {
-            val localX = this.x and 0xf
-            val y = this.y
-            val localZ = this.z and 0xf
-            val chunk = this.chunk
-            val chunkX = chunk.x
-            val chunkZ = chunk.z
-            val srcX = floorMod(chunkX, X_CHUNKS)
-            val srcZ = floorMod(chunkZ, Z_CHUNKS)
-            val world = chunk.world
-            return world.loadedChunks.filter {
-                it != chunk && floorMod(it.x, X_CHUNKS) == srcX && floorMod(it.z, Z_CHUNKS) == srcZ
-            }.map {
-                it.getBlock(localX, y, localZ)
-            }.toSet()
-        }
 }
