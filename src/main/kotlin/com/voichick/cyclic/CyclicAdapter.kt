@@ -5,13 +5,16 @@ import com.comphenix.protocol.ProtocolLibrary
 import com.comphenix.protocol.events.PacketAdapter
 import com.comphenix.protocol.events.PacketContainer
 import com.comphenix.protocol.events.PacketEvent
-import com.comphenix.protocol.wrappers.EnumWrappers
+import com.comphenix.protocol.wrappers.EnumWrappers.PlayerInfoAction.ADD_PLAYER
+import com.comphenix.protocol.wrappers.EnumWrappers.PlayerInfoAction.REMOVE_PLAYER
 import com.google.common.collect.MapMaker
+import net.jcip.annotations.ThreadSafe
 import org.bukkit.entity.Player
 import java.util.*
 import java.util.concurrent.locks.ReentrantLock
 import kotlin.concurrent.withLock
 
+@ThreadSafe
 class CyclicAdapter(private val cyclic: Cyclic) : PacketAdapter(cyclic, MAP_CHUNK, UNLOAD_CHUNK, NAMED_ENTITY_SPAWN, PLAYER_INFO) {
 
     private val customPackets = Collections.newSetFromMap(MapMaker().weakKeys().makeMap<Any, Boolean>())
@@ -47,7 +50,7 @@ class CyclicAdapter(private val cyclic: Cyclic) : PacketAdapter(cyclic, MAP_CHUN
             PLAYER_INFO -> {
                 val uuids = packet.playerInfoDataLists.read(0).map { it.profile.uuid }
                 when (packet.playerInfoAction.read(0)) {
-                    EnumWrappers.PlayerInfoAction.ADD_PLAYER -> {
+                    ADD_PLAYER -> {
                         val packets = mutableListOf<PacketContainer>()
                         lock.withLock {
                             knownUuids.getOrPut(player, ::mutableSetOf).addAll(uuids)
@@ -67,7 +70,7 @@ class CyclicAdapter(private val cyclic: Cyclic) : PacketAdapter(cyclic, MAP_CHUN
                         for (toSend in packets)
                             protocol.sendServerPacket(player, toSend)
                     }
-                    EnumWrappers.PlayerInfoAction.REMOVE_PLAYER -> {
+                    REMOVE_PLAYER -> {
                         lock.withLock {
                             knownUuids[player]?.removeAll(uuids)
                         }

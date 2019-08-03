@@ -2,6 +2,7 @@ package com.voichick.cyclic.gen
 
 import com.voichick.cyclic.Z_CHUNKS
 import com.voichick.cyclic.location
+import net.jcip.annotations.NotThreadSafe
 import org.bukkit.Chunk
 import org.bukkit.Material.GRASS_BLOCK
 import org.bukkit.TreeType.TREE
@@ -10,6 +11,7 @@ import org.bukkit.block.BlockFace.DOWN
 import org.bukkit.generator.BlockPopulator
 import java.util.*
 
+@NotThreadSafe
 class TreePopulator : BlockPopulator() {
     override fun populate(world: World, random: Random, source: Chunk) {
         if (!source.location.isRepresentative) return

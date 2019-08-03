@@ -5,7 +5,6 @@ import com.voichick.cyclic.gen.CyclicGenerator
 import net.jcip.annotations.NotThreadSafe
 import org.bukkit.plugin.java.JavaPlugin
 
-@Suppress("unused")
 @NotThreadSafe
 class Cyclic : JavaPlugin() {
 

@@ -19,7 +19,6 @@ import kotlin.math.sin
 
 class CyclicGenerator : ChunkGenerator() {
 
-
     override fun generateChunkData(world: World, random: Random, x: Int, z: Int, biome: BiomeGrid): ChunkData {
         for (localX in 0..15)
             for (localZ in 0..15)
