@@ -30,6 +30,7 @@
  */
 package org.sfinnqs.cyclic
 
+import kotlinx.collections.immutable.toImmutableSet
 import net.jcip.annotations.NotThreadSafe
 import org.bukkit.entity.Player
 import java.util.*
@@ -54,11 +55,9 @@ class Visibility {
         }
     }
 
-    // TODO return immutable
-    operator fun get(viewer: Player, entity: UUID) = canSee[viewer]?.get(entity)
-            ?: emptySet<FakeEntity>()
+    operator fun get(viewer: Player, entity: UUID) = canSee[viewer]?.get(entity).orEmpty().toImmutableSet()
 
-    operator fun get(fake: FakeEntity) = seenBy[fake] ?: emptySet<Player>()
+    operator fun get(fake: FakeEntity) = seenBy[fake].orEmpty().toImmutableSet()
 
     fun remove(viewer: Player, fake: FakeEntity): Boolean {
         val seenFakes = canSee[viewer]

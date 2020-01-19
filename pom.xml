@@ -87,6 +87,14 @@
       <id>mg-repo</id>
       <url>https://ci.mg-dev.eu/plugin/repository/everything</url>
     </repository>
+    <repository>
+      <snapshots>
+        <enabled>false</enabled>
+      </snapshots>
+      <id>jcenter</id>
+      <name>jcenter</name>
+      <url>https://jcenter.bintray.com/</url>
+    </repository>
   </repositories>
 
   <dependencies>
@@ -111,6 +119,11 @@
       <groupId>net.jcip</groupId>
       <artifactId>jcip-annotations</artifactId>
       <version>1.0</version>
+    </dependency>
+    <dependency>
+      <groupId>org.jetbrains.kotlinx</groupId>
+      <artifactId>kotlinx-collections-immutable-jvm</artifactId>
+      <version>0.3</version>
     </dependency>
 <!--    <dependency>-->
 <!--      <groupId>com.bergerkiller.bukkit</groupId>-->

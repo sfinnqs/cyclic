@@ -33,6 +33,7 @@ package org.sfinnqs.cyclic
 import com.comphenix.protocol.PacketType.Play.Server.*
 import com.comphenix.protocol.ProtocolLibrary
 import com.comphenix.protocol.events.PacketContainer
+import kotlinx.collections.immutable.toImmutableSet
 import org.sfinnqs.cyclic.world.ChunkCoords
 import org.sfinnqs.cyclic.world.CyclicChunk
 import org.sfinnqs.cyclic.world.CyclicLocation
@@ -153,14 +154,8 @@ class WorldManager {
             ProtocolLibrary.getProtocolManager().sendServerPacket(packet.viewer, packet.packet)
     }
 
-    fun getLoadedChunks(viewer: Player): Set<CyclicChunk> {
-        lock.read {
-            val viewerChunks = loadedChunks[viewer] ?: return emptySet()
-            // TODO immutability
-            val result = mutableSetOf<CyclicChunk>()
-            result.addAll(viewerChunks)
-            return result.toSet()
-        }
+    fun getLoadedChunks(viewer: Player) = lock.read {
+        loadedChunks[viewer].orEmpty().toImmutableSet()
     }
 
     fun setLocation(entity: UUID, location: CyclicLocation?): CyclicLocation? {
