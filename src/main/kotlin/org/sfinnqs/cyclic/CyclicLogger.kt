@@ -28,7 +28,7 @@
  * but you may omit source code from the "Minecraft: Java Edition" server from
  * the available Corresponding Source.
  */
-package com.voichick.cyclic
+package org.sfinnqs.cyclic
 
 import java.util.logging.Logger
 

@@ -28,40 +28,49 @@
  * but you may omit source code from the "Minecraft: Java Edition" server from
  * the available Corresponding Source.
  */
-package com.voichick.cyclic
+package org.sfinnqs.cyclic.config
 
-import net.jcip.annotations.NotThreadSafe
+import org.sfinnqs.cyclic.world.ChunkCoords
+import net.jcip.annotations.Immutable
+import org.bukkit.configuration.ConfigurationSection
+import org.bukkit.configuration.InvalidConfigurationException
+import java.util.*
 
-@NotThreadSafe
-class FakeIds {
-    private val entityList = mutableListOf<FakeEntity?>()
-    private val entityIds = mutableMapOf<FakeEntity, Int>()
+@Immutable
+data class WorldConfig(val maxX: Int, val maxZ: Int) {
 
-    operator fun get(fake: FakeEntity) = entityIds[fake]
+    constructor(config: ConfigurationSection) : this(config.maxX, config.maxZ)
 
-    fun getOrCreate(fake: FakeEntity): Int {
-        val existingId = entityIds[fake]
-        if (existingId != null) return existingId
-        for (i in 0..entityList.size) {
-            val storedDuplicate = entityList.getOrNull(i)
-            if (storedDuplicate == null) {
-                if (i == entityList.size)
-                    entityList.add(fake)
-                else
-                    entityList[i] = fake
-                val entityId = Int.MAX_VALUE - i
-                entityIds[fake] = entityId
-                return entityId
-            }
-        }
-        // TODO more elegant way?
-        throw AssertionError()
+    init {
+        if (maxX <= 0 || !maxX.isDivisibleBy16)
+            throw InvalidConfigurationException("maxX must be a positive multiple of 16")
+        if (maxZ <= 0 || !maxX.isDivisibleBy16)
+            throw InvalidConfigurationException("maxZ must be a positive multiple of 16")
     }
 
-    fun remove(fake: FakeEntity): Boolean {
-        val eid = entityIds.remove(fake) ?: return false
-        val formerFake = entityList.set(Int.MAX_VALUE - eid, null)
-        assert(formerFake == fake)
-        return true
+    val xChunks = maxX / 16
+    val zChunks = maxZ / 16
+
+    fun toMap(world: UUID? = null): Map<String, Any> {
+        val result = mutableMapOf<String, Any>("max x" to maxX, "max z" to maxZ)
+        if (world != null)
+            result["id"] = world.toString()
+        return result
     }
+
+    fun isChunkRepresentative(coords: ChunkCoords) = coords.x in 0 until xChunks && coords.z in 0 until zChunks
+
+    private companion object {
+
+        val ConfigurationSection.maxX
+            get() = this.getInt("max x", 48)
+
+        val ConfigurationSection.maxZ
+            get() = this.getInt("max z", 48)
+
+        val Int.isDivisibleBy16
+            get() = this and 0xf == 0
+
+    }
+
 }

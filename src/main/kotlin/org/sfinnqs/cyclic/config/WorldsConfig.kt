@@ -28,9 +28,9 @@
  * but you may omit source code from the "Minecraft: Java Edition" server from
  * the available Corresponding Source.
  */
-package com.voichick.cyclic.config
+package org.sfinnqs.cyclic.config
 
-import com.voichick.cyclic.logger
+import org.sfinnqs.cyclic.logger
 import net.jcip.annotations.Immutable
 import org.bukkit.Server
 import org.bukkit.World

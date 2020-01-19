@@ -28,49 +28,55 @@
  * but you may omit source code from the "Minecraft: Java Edition" server from
  * the available Corresponding Source.
  */
-package com.voichick.cyclic.config
+package org.sfinnqs.cyclic
 
-import com.voichick.cyclic.world.ChunkCoords
-import net.jcip.annotations.Immutable
+import com.comphenix.protocol.ProtocolLibrary
+import org.sfinnqs.cyclic.config.CyclicConfig
+import org.sfinnqs.cyclic.gen.CyclicGenerator
+import net.jcip.annotations.NotThreadSafe
 import org.bukkit.configuration.ConfigurationSection
-import org.bukkit.configuration.InvalidConfigurationException
-import java.util.*
+import org.bukkit.plugin.java.JavaPlugin
 
-@Immutable
-data class WorldConfig(val maxX: Int, val maxZ: Int) {
+@NotThreadSafe
+class Cyclic : JavaPlugin() {
 
-    constructor(config: ConfigurationSection) : this(config.maxX, config.maxZ)
+    lateinit var cyclicConfig: CyclicConfig
+    val manager = WorldManager()
 
-    init {
-        if (maxX <= 0 || !maxX.isDivisibleBy16)
-            throw InvalidConfigurationException("maxX must be a positive multiple of 16")
-        if (maxZ <= 0 || !maxX.isDivisibleBy16)
-            throw InvalidConfigurationException("maxZ must be a positive multiple of 16")
+    override fun onLoad() {
+        org.sfinnqs.cyclic.logger = logger
+        reload()
     }
 
-    val xChunks = maxX / 16
-    val zChunks = maxZ / 16
-
-    fun toMap(world: UUID? = null): Map<String, Any> {
-        val result = mutableMapOf<String, Any>("max x" to maxX, "max z" to maxZ)
-        if (world != null)
-            result["id"] = world.toString()
-        return result
+    override fun onEnable() {
+        server.pluginManager.registerEvents(CyclicListener(this), this)
+        ProtocolLibrary.getProtocolManager().addPacketListener(CyclicAdapter(this))
     }
 
-    fun isChunkRepresentative(coords: ChunkCoords) = coords.x in 0 until xChunks && coords.z in 0 until zChunks
+    override fun getDefaultWorldGenerator(worldName: String, id: String?) = CyclicGenerator(cyclicConfig.worlds[worldName])
+
+    fun reload() {
+        saveDefaultConfig()
+        reloadConfig()
+        cyclicConfig = CyclicConfig(config, server)
+        for (world in server.worlds) {
+            val generator = world.generator as? CyclicGenerator
+                    ?: continue
+            generator.config = cyclicConfig.worlds[world]
+        }
+        writeConfigToFile()
+    }
+
+    private fun writeConfigToFile() {
+        config.setAll(cyclicConfig.toMap())
+        saveConfig()
+    }
 
     private companion object {
-
-        val ConfigurationSection.maxX
-            get() = this.getInt("max x", 48)
-
-        val ConfigurationSection.maxZ
-            get() = this.getInt("max z", 48)
-
-        val Int.isDivisibleBy16
-            get() = this and 0xf == 0
-
+        fun ConfigurationSection.setAll(map: Map<String, Any>) {
+            for (key in map.keys + getKeys(false))
+                this[key] = map[key]
+        }
     }
 
 }

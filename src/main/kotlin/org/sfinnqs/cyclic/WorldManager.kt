@@ -28,14 +28,14 @@
  * but you may omit source code from the "Minecraft: Java Edition" server from
  * the available Corresponding Source.
  */
-package com.voichick.cyclic
+package org.sfinnqs.cyclic
 
 import com.comphenix.protocol.PacketType.Play.Server.*
 import com.comphenix.protocol.ProtocolLibrary
 import com.comphenix.protocol.events.PacketContainer
-import com.voichick.cyclic.world.ChunkCoords
-import com.voichick.cyclic.world.CyclicChunk
-import com.voichick.cyclic.world.CyclicLocation
+import org.sfinnqs.cyclic.world.ChunkCoords
+import org.sfinnqs.cyclic.world.CyclicChunk
+import org.sfinnqs.cyclic.world.CyclicLocation
 import net.jcip.annotations.ThreadSafe
 import org.bukkit.Bukkit
 import org.bukkit.entity.Player

@@ -28,17 +28,17 @@
  * but you may omit source code from the "Minecraft: Java Edition" server from
  * the available Corresponding Source.
  */
-package com.voichick.cyclic
+package org.sfinnqs.cyclic
 
 import com.comphenix.protocol.PacketType.Play.Server.BLOCK_CHANGE
 import com.comphenix.protocol.ProtocolLibrary
 import com.comphenix.protocol.wrappers.BlockPosition
 import com.comphenix.protocol.wrappers.WrappedBlockData
-import com.voichick.cyclic.gen.CyclicGenerator
-import com.voichick.cyclic.world.CyclicBlock
-import com.voichick.cyclic.world.CyclicChunk
-import com.voichick.cyclic.world.CyclicLocation
-import com.voichick.cyclic.world.CyclicWorld
+import org.sfinnqs.cyclic.gen.CyclicGenerator
+import org.sfinnqs.cyclic.world.CyclicBlock
+import org.sfinnqs.cyclic.world.CyclicChunk
+import org.sfinnqs.cyclic.world.CyclicLocation
+import org.sfinnqs.cyclic.world.CyclicWorld
 import net.jcip.annotations.NotThreadSafe
 import org.bukkit.Location
 import org.bukkit.Material.*

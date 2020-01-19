@@ -28,31 +28,32 @@
  * but you may omit source code from the "Minecraft: Java Edition" server from
  * the available Corresponding Source.
  */
-package com.voichick.cyclic.config
+package org.sfinnqs.cyclic.gen
 
+import org.sfinnqs.cyclic.config.WorldConfig
+import org.sfinnqs.cyclic.world.ChunkCoords
 import net.jcip.annotations.Immutable
-import org.bukkit.Server
-import org.bukkit.configuration.Configuration
-import org.bukkit.configuration.ConfigurationSection
+import org.bukkit.Chunk
+import org.bukkit.Material.GRASS_BLOCK
+import org.bukkit.TreeType.TREE
+import org.bukkit.World
+import org.bukkit.block.BlockFace.DOWN
+import org.bukkit.generator.BlockPopulator
+import java.util.*
 
 @Immutable
-data class CyclicConfig(val worlds: WorldsConfig) {
-    constructor(config: Configuration, server: Server) : this(WorldsConfig(config.getSectionOrSet("worlds"), server))
-
-    fun toMap() = mapOf("worlds" to worlds.toMap())
-
-    private companion object {
-        fun ConfigurationSection.getSectionOrSet(path: String): ConfigurationSection {
-            val result = getConfigurationSection(path)
-                    ?: return createSection(path)
-            return if (isSet(path) && isConfigurationSection(path)) {
-                result
-            } else {
-                val default = result.defaultSection
-                        ?: return createSection(path)
-                createSection(path, default.getValues(true))
+data class TreePopulator(val config: WorldConfig) : BlockPopulator() {
+    override fun populate(world: World, random: Random, source: Chunk) {
+        if (!config.isChunkRepresentative(ChunkCoords(source))) return
+        random.setSeed(world.seed + source.x * config.zChunks + source.z)
+        for (localX in 0..15)
+            for (localZ in 0..15) {
+                if (random.nextInt(200) != 0) continue
+                val treeX = (source.x shl 4) + localX
+                val treeZ = (source.z shl 4) + localZ
+                val block = world.getHighestBlockAt(treeX, treeZ)
+                if (block.getRelative(DOWN).type == GRASS_BLOCK)
+                    world.generateTree(block.location, TREE)
             }
-        }
     }
-
 }

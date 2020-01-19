@@ -28,14 +28,9 @@
  * but you may omit source code from the "Minecraft: Java Edition" server from
  * the available Corresponding Source.
  */
-package com.voichick.cyclic.world
+package org.sfinnqs.cyclic
 
-import com.voichick.cyclic.config.WorldConfig
 import net.jcip.annotations.Immutable
-import org.bukkit.block.Block
-import java.util.*
 
 @Immutable
-data class CyclicWorld(val id: UUID, val name: String, val config: WorldConfig) {
-    fun setConfig(config: WorldConfig) = copy(config = config)
-}
+data class LocationOffset(val deltaX: Short, val deltaY: Short, val deltaZ: Short)

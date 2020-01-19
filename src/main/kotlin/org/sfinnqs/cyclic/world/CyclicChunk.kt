@@ -28,29 +28,34 @@
  * but you may omit source code from the "Minecraft: Java Edition" server from
  * the available Corresponding Source.
  */
-package com.voichick.cyclic.world
+package org.sfinnqs.cyclic.world
 
 import net.jcip.annotations.Immutable
-import org.bukkit.block.Block
+import org.bukkit.Chunk
 import java.lang.Math.floorMod
 
+// TODO use ChunkLocation
 @Immutable
-data class CyclicBlock(val world: CyclicWorld, val x: Int, val y: Int, val z: Int) {
-    constructor(world: CyclicWorld, block: Block) : this(world, block.x, block.y, block.z)
+data class CyclicChunk(val world: CyclicWorld, val coords: ChunkCoords) {
+    constructor(world: CyclicWorld, chunk: Chunk) : this(world, ChunkCoords(chunk))
 
-    val chunk = CyclicChunk(world, ChunkCoords(x shr 4, z shr 4))
+    // TODO maybe get rid of these?
+    val x
+    get() = coords.x
 
-    val isRepresentative: Boolean
-        get() {
-            val config = world.config
-            return x in 0 until config.maxX && z in 0 until config.maxZ
-        }
+    val z
+    get() = coords.z
 
-    val representative: CyclicBlock
-        get() {
-            val config = world.config
-            val newX = floorMod(x, config.maxX)
-            val newZ = floorMod(z, config.maxZ)
-            return copy(x = newX, z = newZ)
-        }
+    val isRepresentative = world.config.isChunkRepresentative(coords)
+
+    val representative: CyclicChunk
+    get() {
+        val config = world.config
+        return copy(coords = ChunkCoords(floorMod(coords.x, config.xChunks), floorMod(coords.z, config.zChunks)))
+    }
+
+    fun equalsParallel(other: CyclicChunk) = representative == other.representative
+
+    fun setWorld(world: CyclicWorld) = copy(world = world)
+
 }

@@ -28,9 +28,9 @@
  * but you may omit source code from the "Minecraft: Java Edition" server from
  * the available Corresponding Source.
  */
-package com.voichick.cyclic.world
+package org.sfinnqs.cyclic.world
 
-import com.voichick.cyclic.LocationOffset
+import org.sfinnqs.cyclic.LocationOffset
 import net.jcip.annotations.Immutable
 import org.bukkit.Location
 import org.bukkit.World

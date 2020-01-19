@@ -28,10 +28,29 @@
  * but you may omit source code from the "Minecraft: Java Edition" server from
  * the available Corresponding Source.
  */
-package com.voichick.cyclic.world
+package org.sfinnqs.cyclic.world
 
-import org.bukkit.Chunk
+import net.jcip.annotations.Immutable
+import org.bukkit.block.Block
+import java.lang.Math.floorMod
 
-data class ChunkCoords(val x: Int, val z: Int) {
-    constructor(chunk: Chunk) : this(chunk.x, chunk.z)
+@Immutable
+data class CyclicBlock(val world: CyclicWorld, val x: Int, val y: Int, val z: Int) {
+    constructor(world: CyclicWorld, block: Block) : this(world, block.x, block.y, block.z)
+
+    val chunk = CyclicChunk(world, ChunkCoords(x shr 4, z shr 4))
+
+    val isRepresentative: Boolean
+        get() {
+            val config = world.config
+            return x in 0 until config.maxX && z in 0 until config.maxZ
+        }
+
+    val representative: CyclicBlock
+        get() {
+            val config = world.config
+            val newX = floorMod(x, config.maxX)
+            val newZ = floorMod(z, config.maxZ)
+            return copy(x = newX, z = newZ)
+        }
 }

@@ -28,7 +28,7 @@
  * but you may omit source code from the "Minecraft: Java Edition" server from
  * the available Corresponding Source.
  */
-package com.voichick.cyclic
+package org.sfinnqs.cyclic
 
 import com.comphenix.protocol.PacketType.Play.Server.*
 import com.comphenix.protocol.ProtocolLibrary
@@ -38,7 +38,7 @@ import com.comphenix.protocol.events.PacketEvent
 import com.comphenix.protocol.wrappers.EnumWrappers.PlayerInfoAction.ADD_PLAYER
 import com.comphenix.protocol.wrappers.EnumWrappers.PlayerInfoAction.REMOVE_PLAYER
 import com.google.common.collect.MapMaker
-import com.voichick.cyclic.world.ChunkCoords
+import org.sfinnqs.cyclic.world.ChunkCoords
 import net.jcip.annotations.ThreadSafe
 import org.bukkit.entity.Player
 import java.util.*

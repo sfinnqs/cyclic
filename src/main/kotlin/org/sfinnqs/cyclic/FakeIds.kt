@@ -28,54 +28,40 @@
  * but you may omit source code from the "Minecraft: Java Edition" server from
  * the available Corresponding Source.
  */
-package com.voichick.cyclic
+package org.sfinnqs.cyclic
 
-import com.comphenix.protocol.ProtocolLibrary
-import com.voichick.cyclic.config.CyclicConfig
-import com.voichick.cyclic.gen.CyclicGenerator
 import net.jcip.annotations.NotThreadSafe
-import org.bukkit.configuration.ConfigurationSection
-import org.bukkit.plugin.java.JavaPlugin
 
 @NotThreadSafe
-class Cyclic : JavaPlugin() {
+class FakeIds {
+    private val entityList = mutableListOf<FakeEntity?>()
+    private val entityIds = mutableMapOf<FakeEntity, Int>()
 
-    lateinit var cyclicConfig: CyclicConfig
-    val manager = WorldManager()
+    operator fun get(fake: FakeEntity) = entityIds[fake]
 
-    override fun onLoad() {
-        com.voichick.cyclic.logger = logger
-        reload()
-    }
-
-    override fun onEnable() {
-        server.pluginManager.registerEvents(CyclicListener(this), this)
-        ProtocolLibrary.getProtocolManager().addPacketListener(CyclicAdapter(this))
-    }
-
-    override fun getDefaultWorldGenerator(worldName: String, id: String?) = CyclicGenerator(cyclicConfig.worlds[worldName])
-
-    fun reload() {
-        saveDefaultConfig()
-        reloadConfig()
-        cyclicConfig = CyclicConfig(config, server)
-        for (world in server.worlds) {
-            val generator = world.generator as? CyclicGenerator ?: continue
-            generator.config = cyclicConfig.worlds[world]
+    fun getOrCreate(fake: FakeEntity): Int {
+        val existingId = entityIds[fake]
+        if (existingId != null) return existingId
+        for (i in 0..entityList.size) {
+            val storedDuplicate = entityList.getOrNull(i)
+            if (storedDuplicate == null) {
+                if (i == entityList.size)
+                    entityList.add(fake)
+                else
+                    entityList[i] = fake
+                val entityId = Int.MAX_VALUE - i
+                entityIds[fake] = entityId
+                return entityId
+            }
         }
-        writeConfigToFile()
+        // TODO more elegant way?
+        throw AssertionError()
     }
 
-    private fun writeConfigToFile() {
-        config.setAll(cyclicConfig.toMap())
-        saveConfig()
+    fun remove(fake: FakeEntity): Boolean {
+        val eid = entityIds.remove(fake) ?: return false
+        val formerFake = entityList.set(Int.MAX_VALUE - eid, null)
+        assert(formerFake == fake)
+        return true
     }
-
-    private companion object {
-        fun ConfigurationSection.setAll(map: Map<String, Any>) {
-            for (key in map.keys + getKeys(false))
-                this[key] = map[key]
-        }
-    }
-
 }

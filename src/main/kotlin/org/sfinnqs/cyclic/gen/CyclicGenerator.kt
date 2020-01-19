@@ -28,9 +28,9 @@
  * but you may omit source code from the "Minecraft: Java Edition" server from
  * the available Corresponding Source.
  */
-package com.voichick.cyclic.gen
+package org.sfinnqs.cyclic.gen
 
-import com.voichick.cyclic.config.WorldConfig
+import org.sfinnqs.cyclic.config.WorldConfig
 import net.jcip.annotations.ThreadSafe
 import org.bukkit.Location
 import org.bukkit.Material.*
