@@ -28,32 +28,49 @@
  * but you may omit source code from the "Minecraft: Java Edition" server from
  * the available Corresponding Source.
  */
-package com.voichick.cyclic.gen
+package com.voichick.cyclic.config
 
-import com.voichick.cyclic.config.WorldConfig
 import com.voichick.cyclic.world.ChunkCoords
 import net.jcip.annotations.Immutable
-import org.bukkit.Chunk
-import org.bukkit.Material.GRASS_BLOCK
-import org.bukkit.TreeType.TREE
-import org.bukkit.World
-import org.bukkit.block.BlockFace.DOWN
-import org.bukkit.generator.BlockPopulator
+import org.bukkit.configuration.ConfigurationSection
+import org.bukkit.configuration.InvalidConfigurationException
 import java.util.*
 
 @Immutable
-data class TreePopulator(val config: WorldConfig) : BlockPopulator() {
-    override fun populate(world: World, random: Random, source: Chunk) {
-        if (!config.isChunkRepresentative(ChunkCoords(source))) return
-        random.setSeed(world.seed + source.x * config.zChunks + source.z)
-        for (localX in 0..15)
-            for (localZ in 0..15) {
-                if (random.nextInt(200) != 0) continue
-                val treeX = (source.x shl 4) + localX
-                val treeZ = (source.z shl 4) + localZ
-                val block = world.getHighestBlockAt(treeX, treeZ)
-                if (block.getRelative(DOWN).type == GRASS_BLOCK)
-                    world.generateTree(block.location, TREE)
-            }
+data class WorldConfig(val maxX: Int, val maxZ: Int) {
+
+    constructor(config: ConfigurationSection) : this(config.maxX, config.maxZ)
+
+    init {
+        if (maxX <= 0 || !maxX.isDivisibleBy16)
+            throw InvalidConfigurationException("maxX must be a positive multiple of 16")
+        if (maxZ <= 0 || !maxX.isDivisibleBy16)
+            throw InvalidConfigurationException("maxZ must be a positive multiple of 16")
     }
+
+    val xChunks = maxX / 16
+    val zChunks = maxZ / 16
+
+    fun toMap(world: UUID? = null): Map<String, Any> {
+        val result = mutableMapOf<String, Any>("max x" to maxX, "max z" to maxZ)
+        if (world != null)
+            result["id"] = world.toString()
+        return result
+    }
+
+    fun isChunkRepresentative(coords: ChunkCoords) = coords.x in 0 until xChunks && coords.z in 0 until zChunks
+
+    private companion object {
+
+        val ConfigurationSection.maxX
+            get() = this.getInt("max x", 48)
+
+        val ConfigurationSection.maxZ
+            get() = this.getInt("max z", 48)
+
+        val Int.isDivisibleBy16
+            get() = this and 0xf == 0
+
+    }
+
 }

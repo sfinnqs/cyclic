@@ -1,6 +1,6 @@
 /**
  * Cyclic - A Bukkit plugin for worlds that wrap around
- * Copyright (C) 2019 sfinnqs
+ * Copyright (C) 2020 sfinnqs
  *
  * This file is part of Cyclic.
  *
@@ -28,25 +28,36 @@
  * but you may omit source code from the "Minecraft: Java Edition" server from
  * the available Corresponding Source.
  */
-package com.voichick.cyclic
+package com.voichick.cyclic.world
 
+import com.voichick.cyclic.LocationOffset
 import net.jcip.annotations.Immutable
 import org.bukkit.Location
-import org.bukkit.entity.Player
+import org.bukkit.World
+import org.bukkit.entity.Entity
 import org.bukkit.util.NumberConversions.floor
 import org.bukkit.util.NumberConversions.round
-import kotlin.math.PI
 import kotlin.math.roundToLong
 
 @Immutable
-data class ImmutableLocation(val x: Double, val y: Double, val z: Double, val yaw: Byte, val pitch: Byte, val grounded: Boolean) {
-    val chunk = ChunkLocation(floor(x) shr 4, floor(z) shr 4)
+data class CyclicLocation(val world: CyclicWorld, val x: Double, val y: Double, val z: Double, val yaw: Float, val pitch: Float, val grounded: Boolean) {
+    val yawByte = angleFloatToByte(yaw)
+    val pitchByte = angleFloatToByte(pitch)
+    val block = CyclicBlock(world, floor(x), floor(y), floor(z))
+    val chunk = block.chunk
 
-    constructor(x: Double, y: Double, z: Double, yaw: Float, pitch: Float, grounded: Boolean) : this(x, y, z, angleFloatToByte(yaw), angleFloatToByte(pitch), grounded)
-    constructor(location: Location, grounded: Boolean) : this(location.x, location.y, location.z, location.yaw, location.pitch, grounded)
-    constructor(player: Player) : this(player.location, player.isOnGround)
+    constructor(world: CyclicWorld, location: Location, grounded: Boolean) : this(world, location.x, location.y, location.z, location.yaw, location.pitch, grounded)
+    constructor(world: CyclicWorld, entity: Entity) : this(world, entity.location, entity.isOnGround)
 
-    operator fun minus(other: ImmutableLocation): LocationOffset? {
+    val representative: CyclicLocation
+        get() {
+            val representativeBlock = block.representative
+            val offsetX = block.x - representativeBlock.x
+            val offsetZ = block.z - representativeBlock.z
+            return copy(x = x - offsetX, z = z - offsetZ)
+        }
+
+    operator fun minus(other: CyclicLocation): LocationOffset? {
         val shortRange = Short.MIN_VALUE..Short.MAX_VALUE
         val deltaX = (x * 4096).roundToLong() - (other.x * 4096).roundToLong()
         val deltaXShort = if (deltaX in shortRange)
@@ -65,6 +76,10 @@ data class ImmutableLocation(val x: Double, val y: Double, val z: Double, val ya
             return null
         return LocationOffset(deltaXShort, deltaYShort, deltaZShort)
     }
+
+    fun setWorld(world: CyclicWorld) = copy(world = world)
+
+    fun toBukkitLocation(world: World) = Location(world, x, y, z, yaw, pitch)
 
     private companion object {
         fun angleFloatToByte(angle: Float) = round(angle * 256.0 / 360.0).toByte()

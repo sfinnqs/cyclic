@@ -1,6 +1,6 @@
 /**
  * Cyclic - A Bukkit plugin for worlds that wrap around
- * Copyright (C) 2019 sfinnqs
+ * Copyright (C) 2020 sfinnqs
  *
  * This file is part of Cyclic.
  *

@@ -1,6 +1,6 @@
 /**
  * Cyclic - A Bukkit plugin for worlds that wrap around
- * Copyright (C) 2019 sfinnqs
+ * Copyright (C) 2020 sfinnqs
  *
  * This file is part of Cyclic.
  *
@@ -34,4 +34,4 @@ import net.jcip.annotations.Immutable
 import java.util.*
 
 @Immutable
-data class Duplicate(val uuid: UUID, val offsetX: Int, val offsetZ: Int)
+data class FakeEntity(val entity: UUID, val offsetX: Int, val offsetZ: Int)

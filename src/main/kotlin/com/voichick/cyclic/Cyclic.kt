@@ -1,6 +1,6 @@
 /**
  * Cyclic - A Bukkit plugin for worlds that wrap around
- * Copyright (C) 2019 sfinnqs
+ * Copyright (C) 2020 sfinnqs
  *
  * This file is part of Cyclic.
  *
@@ -31,20 +31,51 @@
 package com.voichick.cyclic
 
 import com.comphenix.protocol.ProtocolLibrary
+import com.voichick.cyclic.config.CyclicConfig
 import com.voichick.cyclic.gen.CyclicGenerator
 import net.jcip.annotations.NotThreadSafe
+import org.bukkit.configuration.ConfigurationSection
 import org.bukkit.plugin.java.JavaPlugin
 
 @NotThreadSafe
 class Cyclic : JavaPlugin() {
 
-    val manager = VisibilityManager()
+    lateinit var cyclicConfig: CyclicConfig
+    val manager = WorldManager()
+
+    override fun onLoad() {
+        com.voichick.cyclic.logger = logger
+        reload()
+    }
 
     override fun onEnable() {
         server.pluginManager.registerEvents(CyclicListener(this), this)
         ProtocolLibrary.getProtocolManager().addPacketListener(CyclicAdapter(this))
     }
 
-    override fun getDefaultWorldGenerator(worldName: String, id: String?) = CyclicGenerator()
+    override fun getDefaultWorldGenerator(worldName: String, id: String?) = CyclicGenerator(cyclicConfig.worlds[worldName])
+
+    fun reload() {
+        saveDefaultConfig()
+        reloadConfig()
+        cyclicConfig = CyclicConfig(config, server)
+        for (world in server.worlds) {
+            val generator = world.generator as? CyclicGenerator ?: continue
+            generator.config = cyclicConfig.worlds[world]
+        }
+        writeConfigToFile()
+    }
+
+    private fun writeConfigToFile() {
+        config.setAll(cyclicConfig.toMap())
+        saveConfig()
+    }
+
+    private companion object {
+        fun ConfigurationSection.setAll(map: Map<String, Any>) {
+            for (key in map.keys + getKeys(false))
+                this[key] = map[key]
+        }
+    }
 
 }

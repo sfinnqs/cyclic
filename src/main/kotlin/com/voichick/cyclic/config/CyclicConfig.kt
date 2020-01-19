@@ -1,6 +1,6 @@
 /**
  * Cyclic - A Bukkit plugin for worlds that wrap around
- * Copyright (C) 2019 sfinnqs
+ * Copyright (C) 2020 sfinnqs
  *
  * This file is part of Cyclic.
  *
@@ -28,19 +28,31 @@
  * but you may omit source code from the "Minecraft: Java Edition" server from
  * the available Corresponding Source.
  */
-package com.voichick.cyclic
+package com.voichick.cyclic.config
 
-import org.bukkit.Chunk
-import org.bukkit.block.Block
+import net.jcip.annotations.Immutable
+import org.bukkit.Server
+import org.bukkit.configuration.Configuration
+import org.bukkit.configuration.ConfigurationSection
 
-const val X_CHUNKS = 3
-const val Z_CHUNKS = 3
+@Immutable
+data class CyclicConfig(val worlds: WorldsConfig) {
+    constructor(config: Configuration, server: Server) : this(WorldsConfig(config.getSectionOrSet("worlds"), server))
 
-const val MAX_X = X_CHUNKS * 16
-const val MAX_Z = Z_CHUNKS * 16
+    fun toMap() = mapOf("worlds" to worlds.toMap())
 
-val Block.isRepresentative
-    get() = x in 0 until MAX_X && z in 0 until MAX_Z
+    private companion object {
+        fun ConfigurationSection.getSectionOrSet(path: String): ConfigurationSection {
+            val result = getConfigurationSection(path)
+                    ?: return createSection(path)
+            return if (isSet(path) && isConfigurationSection(path)) {
+                result
+            } else {
+                val default = result.defaultSection
+                        ?: return createSection(path)
+                createSection(path, default.getValues(true))
+            }
+        }
+    }
 
-val Chunk.location
-    get() = ChunkLocation(x, z)
+}

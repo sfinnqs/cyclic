@@ -1,6 +1,6 @@
 /**
  * Cyclic - A Bukkit plugin for worlds that wrap around
- * Copyright (C) 2019 sfinnqs
+ * Copyright (C) 2020 sfinnqs
  *
  * This file is part of Cyclic.
  *
@@ -30,10 +30,8 @@
  */
 package com.voichick.cyclic.gen
 
-import com.voichick.cyclic.MAX_X
-import com.voichick.cyclic.MAX_Z
-import com.voichick.cyclic.X_CHUNKS
-import com.voichick.cyclic.Z_CHUNKS
+import com.voichick.cyclic.config.WorldConfig
+import net.jcip.annotations.ThreadSafe
 import org.bukkit.Location
 import org.bukkit.Material.*
 import org.bukkit.World
@@ -44,24 +42,34 @@ import org.bukkit.util.noise.SimplexNoiseGenerator
 import java.lang.Math.PI
 import java.lang.Math.floorMod
 import java.util.*
+import java.util.concurrent.locks.ReentrantReadWriteLock
+import kotlin.concurrent.read
+import kotlin.concurrent.write
 import kotlin.math.cos
 import kotlin.math.sin
 
-class CyclicGenerator : ChunkGenerator() {
+@ThreadSafe
+class CyclicGenerator(config: WorldConfig) : ChunkGenerator() {
+
+    private val lock = ReentrantReadWriteLock()
+    var config = config
+        get() = lock.read { field }
+        set(value) = lock.write { field = value }
+
 
     override fun generateChunkData(world: World, random: Random, x: Int, z: Int, biome: BiomeGrid): ChunkData {
         for (localX in 0..15)
             for (localZ in 0..15)
                 biome.setBiome(localX, localZ, Biome.PLAINS)
         val result = createChunkData(world)
-        if (x !in 0 until X_CHUNKS || z !in 0 until Z_CHUNKS)
+        if (x !in 0 until config.xChunks || z !in 0 until config.zChunks)
             return result
         result.setRegion(0, 0, 0, 16, 1, 16, BEDROCK)
         val noise = SimplexNoiseGenerator(world)
         for (localX in 0..15) {
-            val worldX = (x shl 4) + localX
+            val worldX = x * 16 + localX
             for (localZ in 0..15) {
-                val worldZ = (z shl 4) + localZ
+                val worldZ = z * 16 + localZ
                 val rawHeight = getHeight(noise, worldX, worldZ)
                 val height = round(rawHeight)
                 result.setRegion(localX, 1, localZ, localX + 1, height - 4, localZ + 1, STONE)
@@ -78,15 +86,17 @@ class CyclicGenerator : ChunkGenerator() {
         return result
     }
 
-    override fun getDefaultPopulators(world: World) = listOf(TreePopulator())
+    override fun getDefaultPopulators(world: World) = listOf(TreePopulator(config))
 
     override fun getFixedSpawnLocation(world: World, random: Random) = Location(world, 0.0, 64.0, 0.0)
 
     override fun isParallelCapable() = true
 
     private fun getHeight(noise: SimplexNoiseGenerator, x: Int, z: Int): Double {
-        val angle1 = floorMod(x, MAX_X) * 2.0 * PI / MAX_X
-        val angle2 = floorMod(z, MAX_Z) * 2.0 * PI / MAX_Z
+        val maxX = config.maxX
+        val maxZ = config.maxZ
+        val angle1 = floorMod(x, maxX) * 2.0 * PI / maxX
+        val angle2 = floorMod(z, maxZ) * 2.0 * PI / maxZ
         val scale = 0.2
         val value = noise.noise(scale * cos(angle1), scale * sin(angle1), scale * cos(angle2), scale * sin(angle2))
         return WATER_LEVEL + 2.0 + 10.0 * value

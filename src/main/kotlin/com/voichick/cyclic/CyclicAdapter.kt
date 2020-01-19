@@ -1,6 +1,6 @@
 /**
  * Cyclic - A Bukkit plugin for worlds that wrap around
- * Copyright (C) 2019 sfinnqs
+ * Copyright (C) 2020 sfinnqs
  *
  * This file is part of Cyclic.
  *
@@ -38,17 +38,21 @@ import com.comphenix.protocol.events.PacketEvent
 import com.comphenix.protocol.wrappers.EnumWrappers.PlayerInfoAction.ADD_PLAYER
 import com.comphenix.protocol.wrappers.EnumWrappers.PlayerInfoAction.REMOVE_PLAYER
 import com.google.common.collect.MapMaker
+import com.voichick.cyclic.world.ChunkCoords
 import net.jcip.annotations.ThreadSafe
 import org.bukkit.entity.Player
 import java.util.*
 import java.util.concurrent.locks.ReentrantLock
+import java.util.concurrent.locks.ReentrantReadWriteLock
+import kotlin.concurrent.read
 import kotlin.concurrent.withLock
+import kotlin.concurrent.write
 
 @ThreadSafe
 class CyclicAdapter(private val cyclic: Cyclic) : PacketAdapter(cyclic, MAP_CHUNK, UNLOAD_CHUNK, NAMED_ENTITY_SPAWN, PLAYER_INFO) {
 
     private val customPackets = Collections.newSetFromMap(MapMaker().weakKeys().makeMap<Any, Boolean>())
-    private val lock = ReentrantLock()
+    private val lock = ReentrantReadWriteLock()
     private val knownUuids = WeakHashMap<Player, MutableSet<UUID>>()
     private val spawnQueue = WeakHashMap<Player, MutableMap<UUID, Queue<PacketContainer>>>()
 
@@ -61,17 +65,19 @@ class CyclicAdapter(private val cyclic: Cyclic) : PacketAdapter(cyclic, MAP_CHUN
                 val ints = packet.integers
                 val x = ints.read(0)
                 val z = ints.read(1)
-                cyclic.manager.loadChunk(player, ChunkLocation(x, z))
+                cyclic.manager.loadChunk(player, ChunkCoords(x, z))
             }
             UNLOAD_CHUNK -> {
                 val ints = packet.integers
                 val x = ints.read(0)
                 val z = ints.read(1)
-                cyclic.manager.unloadChunk(player, ChunkLocation(x, z))
+                cyclic.manager.unloadChunk(player, ChunkCoords(x, z))
             }
             NAMED_ENTITY_SPAWN -> {
+                if (cyclic.manager.getViewerWorld(player) == null) return
                 val uuid = packet.uuiDs.read(0)
-                lock.withLock {
+                if (uuid in lock.read{ knownUuids[player] }.orEmpty()) return
+                lock.write {
                     if (uuid in knownUuids[player].orEmpty()) return
                     spawnQueue.getOrPut(player, ::mutableMapOf).getOrPut(uuid, ::LinkedList).add(packet)
                     event.isCancelled = true
@@ -82,7 +88,7 @@ class CyclicAdapter(private val cyclic: Cyclic) : PacketAdapter(cyclic, MAP_CHUN
                 when (packet.playerInfoAction.read(0)) {
                     ADD_PLAYER -> {
                         val packets = mutableListOf<PacketContainer>()
-                        lock.withLock {
+                        lock.write {
                             knownUuids.getOrPut(player, ::mutableSetOf).addAll(uuids)
                             val queues = spawnQueue[player] ?: return
                             for (uuid in uuids) {
@@ -101,7 +107,7 @@ class CyclicAdapter(private val cyclic: Cyclic) : PacketAdapter(cyclic, MAP_CHUN
                             protocol.sendServerPacket(player, toSend)
                     }
                     REMOVE_PLAYER -> {
-                        lock.withLock {
+                        lock.write {
                             knownUuids[player]?.removeAll(uuids)
                         }
                     }

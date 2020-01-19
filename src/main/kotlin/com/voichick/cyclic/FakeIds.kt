@@ -1,6 +1,6 @@
 /**
  * Cyclic - A Bukkit plugin for worlds that wrap around
- * Copyright (C) 2019 sfinnqs
+ * Copyright (C) 2020 sfinnqs
  *
  * This file is part of Cyclic.
  *
@@ -30,15 +30,38 @@
  */
 package com.voichick.cyclic
 
-import net.jcip.annotations.Immutable
-import java.lang.Math.floorMod
+import net.jcip.annotations.NotThreadSafe
 
-@Immutable
-data class ChunkLocation(val x: Int, val z: Int) {
-    val isRepresentative
-        get() = x in 0 until X_CHUNKS && z in 0 until Z_CHUNKS
+@NotThreadSafe
+class FakeIds {
+    private val entityList = mutableListOf<FakeEntity?>()
+    private val entityIds = mutableMapOf<FakeEntity, Int>()
 
-    fun equalsParallel(other: ChunkLocation): Boolean {
-        return floorMod(other.x - x, X_CHUNKS) == 0 && floorMod(other.z - z, Z_CHUNKS) == 0
+    operator fun get(fake: FakeEntity) = entityIds[fake]
+
+    fun getOrCreate(fake: FakeEntity): Int {
+        val existingId = entityIds[fake]
+        if (existingId != null) return existingId
+        for (i in 0..entityList.size) {
+            val storedDuplicate = entityList.getOrNull(i)
+            if (storedDuplicate == null) {
+                if (i == entityList.size)
+                    entityList.add(fake)
+                else
+                    entityList[i] = fake
+                val entityId = Int.MAX_VALUE - i
+                entityIds[fake] = entityId
+                return entityId
+            }
+        }
+        // TODO more elegant way?
+        throw AssertionError()
+    }
+
+    fun remove(fake: FakeEntity): Boolean {
+        val eid = entityIds.remove(fake) ?: return false
+        val formerFake = entityList.set(Int.MAX_VALUE - eid, null)
+        assert(formerFake == fake)
+        return true
     }
 }
