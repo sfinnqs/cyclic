@@ -31,21 +31,26 @@
 package org.sfinnqs.cyclic
 
 import com.comphenix.protocol.ProtocolLibrary
-import org.sfinnqs.cyclic.config.CyclicConfig
-import org.sfinnqs.cyclic.gen.CyclicGenerator
 import net.jcip.annotations.NotThreadSafe
 import org.bukkit.configuration.ConfigurationSection
 import org.bukkit.plugin.java.JavaPlugin
+import org.sfinnqs.cyclic.config.CyclicConfig
+import org.sfinnqs.cyclic.gen.CyclicGenerator
 
 @NotThreadSafe
 class Cyclic : JavaPlugin() {
 
     lateinit var cyclicConfig: CyclicConfig
+        private set
     val manager = WorldManager()
 
     override fun onLoad() {
         org.sfinnqs.cyclic.logger = logger
-        reload()
+        saveDefaultConfig()
+        reloadConfig()
+        cyclicConfig = CyclicConfig(config, server)
+        config.setAll(cyclicConfig.toMap())
+        saveConfig()
     }
 
     override fun onEnable() {
@@ -54,23 +59,6 @@ class Cyclic : JavaPlugin() {
     }
 
     override fun getDefaultWorldGenerator(worldName: String, id: String?) = CyclicGenerator(cyclicConfig.worlds[worldName])
-
-    fun reload() {
-        saveDefaultConfig()
-        reloadConfig()
-        cyclicConfig = CyclicConfig(config, server)
-        for (world in server.worlds) {
-            val generator = world.generator as? CyclicGenerator
-                    ?: continue
-            generator.config = cyclicConfig.worlds[world]
-        }
-        writeConfigToFile()
-    }
-
-    private fun writeConfigToFile() {
-        config.setAll(cyclicConfig.toMap())
-        saveConfig()
-    }
 
     private companion object {
         fun ConfigurationSection.setAll(map: Map<String, Any>) {

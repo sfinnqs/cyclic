@@ -34,12 +34,12 @@ import com.comphenix.protocol.PacketType.Play.Server.*
 import com.comphenix.protocol.ProtocolLibrary
 import com.comphenix.protocol.events.PacketContainer
 import kotlinx.collections.immutable.toImmutableSet
-import org.sfinnqs.cyclic.world.ChunkCoords
-import org.sfinnqs.cyclic.world.CyclicChunk
-import org.sfinnqs.cyclic.world.CyclicLocation
 import net.jcip.annotations.ThreadSafe
 import org.bukkit.Bukkit
 import org.bukkit.entity.Player
+import org.sfinnqs.cyclic.world.ChunkCoords
+import org.sfinnqs.cyclic.world.CyclicChunk
+import org.sfinnqs.cyclic.world.CyclicLocation
 import java.util.*
 import java.util.concurrent.locks.ReentrantReadWriteLock
 import kotlin.concurrent.read
@@ -56,38 +56,6 @@ class WorldManager {
     // also used as a set of players
     // TODO players should be removed from here
     private val loadedChunks = WeakHashMap<Player, MutableSet<CyclicChunk>>()
-
-//    var config: CyclicConfig = config
-//        get() = lock.read { field }
-//        set(value) {
-//            val worlds = value.worlds
-//            fun newWorld(world: CyclicWorld) = world.setConfig(worlds[world.id])
-//            lock.read {
-//                val usedWorlds = entityLocs.values.map {
-//                    it.world
-//                }.toSet() + loadedChunks.values.flatMap { set ->
-//                    set.map { chunk -> chunk.world }
-//                }
-//                if (usedWorlds.all { it == newWorld(it) }) return
-//            }
-//            lock.write {
-//                val locIterator = entityLocs.iterator()
-//                while (locIterator.hasNext()) {
-//                    val next = locIterator.next()
-//                    val oldLoc = next.value
-//                    next.setValue(oldLoc.setWorld(newWorld(oldLoc.world)))
-//                }
-//                val setIterator = loadedChunks.iterator()
-//                while (setIterator.hasNext()) {
-//                    val next = setIterator.next()
-//                    val newValue = next.value.map {
-//                        it.setWorld(newWorld(it.world))
-//                    }.toMutableSet()
-//                    next.setValue(newValue)
-//                }
-//            }
-//            field = value
-//        }
 
     // the only method in this class that calls Player.getUniqueId()
     fun addPlayer(player: Player) {

@@ -30,7 +30,6 @@
  */
 package org.sfinnqs.cyclic.gen
 
-import org.sfinnqs.cyclic.config.WorldConfig
 import net.jcip.annotations.ThreadSafe
 import org.bukkit.Location
 import org.bukkit.Material.*
@@ -39,28 +38,21 @@ import org.bukkit.block.Biome
 import org.bukkit.generator.ChunkGenerator
 import org.bukkit.util.NumberConversions.round
 import org.bukkit.util.noise.SimplexNoiseGenerator
+import org.sfinnqs.cyclic.config.WorldConfig
 import java.lang.Math.PI
 import java.lang.Math.floorMod
 import java.util.*
-import java.util.concurrent.locks.ReentrantReadWriteLock
-import kotlin.concurrent.read
-import kotlin.concurrent.write
 import kotlin.math.cos
 import kotlin.math.sin
 
 @ThreadSafe
-class CyclicGenerator(config: WorldConfig) : ChunkGenerator() {
-
-    private val lock = ReentrantReadWriteLock()
-    var config = config
-        get() = lock.read { field }
-        set(value) = lock.write { field = value }
-
+class CyclicGenerator(val config: WorldConfig) : ChunkGenerator() {
 
     override fun generateChunkData(world: World, random: Random, x: Int, z: Int, biome: BiomeGrid): ChunkData {
         for (localX in 0..15)
-            for (localZ in 0..15)
-                biome.setBiome(localX, localZ, Biome.PLAINS)
+            for (localY in 0..15)
+                for (localZ in 0..15)
+                    biome.setBiome(localX, localY, localZ, Biome.PLAINS)
         val result = createChunkData(world)
         if (x !in 0 until config.xChunks || z !in 0 until config.zChunks)
             return result
