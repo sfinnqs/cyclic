@@ -28,15 +28,17 @@
  * but you may omit source code from the "Minecraft: Java Edition" server from
  * the available Corresponding Source.
  */
-package org.sfinnqs.cyclic
+package org.sfinnqs.cyclic.manager
 
 import com.comphenix.protocol.PacketType.Play.Server.*
 import com.comphenix.protocol.ProtocolLibrary
 import com.comphenix.protocol.events.PacketContainer
-import kotlinx.collections.immutable.toImmutableSet
+import com.google.common.collect.HashMultimap
+import com.google.common.collect.SetMultimap
 import net.jcip.annotations.ThreadSafe
 import org.bukkit.Bukkit
 import org.bukkit.entity.Player
+import org.sfinnqs.cyclic.FakeEntity
 import org.sfinnqs.cyclic.world.ChunkCoords
 import org.sfinnqs.cyclic.world.CyclicChunk
 import org.sfinnqs.cyclic.world.CyclicLocation
@@ -49,13 +51,13 @@ import kotlin.concurrent.write
 class WorldManager {
     private val lock = ReentrantReadWriteLock()
     private val viewerIds = WeakHashMap<Player, UUID>()
-    private val entityLocs = mutableMapOf<UUID, CyclicLocation>()
+    private val locations = LocationManager()
     private val fakeIds = FakeIds()
     private val visibility = Visibility()
-    private val dupMap = mutableMapOf<UUID, MutableSet<FakeEntity>>()
+    private val fakeMap: SetMultimap<UUID, FakeEntity> = HashMultimap.create()
     // also used as a set of players
     // TODO players should be removed from here
-    private val loadedChunks = WeakHashMap<Player, MutableSet<CyclicChunk>>()
+    private val loadedChunks = ChunkManager()
 
     // the only method in this class that calls Player.getUniqueId()
     fun addPlayer(player: Player) {
@@ -71,27 +73,25 @@ class WorldManager {
         lock.read {
             val world = getViewerWorld(viewer) ?: return
             val chunk = CyclicChunk(world, coords)
-            if (loadedChunks[viewer]?.contains(chunk) == true) return
+            if (loadedChunks.contains(viewer, chunk)) return
         }
         val packets = mutableListOf<PacketToSend>()
         lock.write {
             val world = getViewerWorld(viewer) ?: return
             val chunk = CyclicChunk(world, coords)
             val worldConfig = world.config
-            loadedChunks.getOrPut(viewer, ::mutableSetOf).add(chunk)
-            // TODO maybe group entities by chunk to make more efficient
-            for ((uuid, location) in entityLocs) {
+            loadedChunks.add(viewer, chunk)
+            for ((uuid, location) in locations[chunk.representative]) {
                 val playerChunk = location.chunk
-                if (playerChunk == chunk || !playerChunk.equalsParallel(chunk))
-                    continue
+                if (playerChunk == chunk) continue
                 val offsetX = (chunk.x - playerChunk.x) / worldConfig.xChunks
                 val offsetZ = (chunk.z - playerChunk.z) / worldConfig.zChunks
-                val duplicate = FakeEntity(uuid, offsetX, offsetZ)
+                val fake = FakeEntity(uuid, offsetX, offsetZ)
                 val newX = location.x + offsetX * worldConfig.maxX
                 val newZ = location.z + offsetZ * worldConfig.maxZ
                 assert(location.world == world)
                 val newLocation = location.copy(x = newX, z = newZ)
-                packets.add(PacketToSend(viewer, spawnDuplicate(duplicate, viewer, newLocation)))
+                packets.add(PacketToSend(viewer, spawnFake(fake, viewer, newLocation)))
             }
         }
         for (packet in packets)
@@ -102,7 +102,7 @@ class WorldManager {
         lock.read {
             val world = getViewerWorld(viewer)!!
             val chunk = CyclicChunk(world, coords)
-            if (loadedChunks[viewer]?.contains(chunk) != true) return
+            if (!loadedChunks.contains(viewer, chunk)) return
         }
         val packets = lock.write {
             val world = getViewerWorld(viewer)!!
@@ -122,31 +122,25 @@ class WorldManager {
             ProtocolLibrary.getProtocolManager().sendServerPacket(packet.viewer, packet.packet)
     }
 
-    fun getLoadedChunks(viewer: Player) = lock.read {
-        loadedChunks[viewer].orEmpty().toImmutableSet()
-    }
+    fun getLoadedChunks(viewer: Player) = lock.read { loadedChunks[viewer] }
 
     fun setLocation(entity: UUID, location: CyclicLocation?): CyclicLocation? {
         lock.read {
-            entityLocs[entity]
+            locations[entity]
         }?.takeIf { it == location }?.let { return it }
 
         val packets = mutableListOf<PacketToSend>()
         val oldLoc = lock.write {
-            val oldLoc = if (location == null)
-                entityLocs.remove(entity)
-            else
-                entityLocs.put(entity, location)
-            for ((viewer, chunks) in loadedChunks) {
+            val oldLoc = locations.set(entity, location)
+            for (viewer in loadedChunks.viewers) {
                 // fake entities that move are removed from fakes, and any left
                 // are despawned
                 val fakes = visibility[viewer, entity].toMutableSet()
                 if (location != null) {
                     val chunk = location.chunk
                     val worldConfig = location.world.config
-                    for (loadedChunk in chunks) {
-                        if (loadedChunk == chunk || !loadedChunk.equalsParallel(chunk))
-                            continue
+                    for (loadedChunk in loadedChunks[viewer, chunk.representative]) {
+                        if (loadedChunk == chunk) continue
                         val offsetX = (loadedChunk.x - chunk.x) / worldConfig.xChunks
                         val offsetZ = (loadedChunk.z - chunk.z) / worldConfig.zChunks
                         val fake = FakeEntity(entity, offsetX, offsetZ)
@@ -157,19 +151,19 @@ class WorldManager {
                         val newLocation = location.copy(x = newX, z = newZ)
                         if (fakes.remove(fake)) {
                             // fake must be moved
-                            val oldDupX = oldLoc!!.x + offsetX * maxX
-                            val oldDupZ = oldLoc.z + offsetZ * maxZ
+                            val oldFakeX = oldLoc!!.x + offsetX * maxX
+                            val oldFakeZ = oldLoc.z + offsetZ * maxZ
                             // TODO function to translate ImmutableLocation
-                            val oldDupLoc = oldLoc.copy(x = oldDupX, z = oldDupZ)
-                            packets.addAll(updateDuplicate(fake, newLocation, oldDupLoc).map { PacketToSend(viewer, it) })
+                            val oldFakeLoc = oldLoc.copy(x = oldFakeX, z = oldFakeZ)
+                            packets.addAll(updateFake(fake, newLocation, oldFakeLoc).map { PacketToSend(viewer, it) })
                         } else {
                             // fake must be spawned
-                            packets.add(PacketToSend(viewer, spawnDuplicate(fake, viewer, newLocation)))
+                            packets.add(PacketToSend(viewer, spawnFake(fake, viewer, newLocation)))
                         }
                     }
                 }
-                // TODO despawn multiple duplicates in one packet
-                packets.addAll(fakes.map { PacketToSend(viewer, despawnDuplicate(it, viewer)) })
+                // TODO despawn multiple fakes in one packet
+                packets.addAll(fakes.map { PacketToSend(viewer, despawnFake(it, viewer)) })
             }
             oldLoc
         }
@@ -179,34 +173,33 @@ class WorldManager {
     }
 
     fun getViewerWorld(viewer: Player) = lock.read {
-        entityLocs[viewerIds[viewer]]
+        viewerIds[viewer]?.let { locations[it] }
     }?.world
 
     private fun unloadPackets(viewer: Player, chunk: CyclicChunk): List<PacketToSend> {
         val result = mutableListOf<PacketToSend>()
-        val removed = loadedChunks[viewer]?.remove(chunk) ?: false
+        val removed = loadedChunks.remove(viewer, chunk)
         if (!removed) return emptyList()
         val world = chunk.world
         val worldConfig = world.config
-        for ((entity, location) in entityLocs) {
+        for ((entity, location) in locations[chunk.representative]) {
             val entityChunk = location.chunk
-            if (entityChunk == chunk || !entityChunk.equalsParallel(chunk)) continue
-            assert(location.world == world)
+            if (entityChunk == chunk) continue
             val offsetX = (chunk.x - entityChunk.x) / worldConfig.xChunks
             val offsetZ = (chunk.z - entityChunk.z) / worldConfig.zChunks
-            val duplicate = FakeEntity(entity, offsetX, offsetZ)
-            result.add(PacketToSend(viewer, despawnDuplicate(duplicate, viewer)))
+            val fake = FakeEntity(entity, offsetX, offsetZ)
+            result.add(PacketToSend(viewer, despawnFake(fake, viewer)))
         }
         return result
     }
 
-    private fun spawnDuplicate(fake: FakeEntity, viewer: Player, location: CyclicLocation): PacketContainer {
+    private fun spawnFake(fake: FakeEntity, viewer: Player, location: CyclicLocation): PacketContainer {
         // TODO maybe combine the three methods somehow?
         val uuid = fake.entity
         visibility.add(viewer, fake)
         val protocol = ProtocolLibrary.getProtocolManager()
         val packet = protocol.createPacket(NAMED_ENTITY_SPAWN)
-        dupMap.getOrPut(uuid, ::mutableSetOf).add(fake)
+        fakeMap.put(uuid, fake)
         packet.integers.write(0, fakeIds.getOrCreate(fake))
         packet.uuiDs.write(0, uuid)
         val doubles = packet.doubles
@@ -229,7 +222,7 @@ class WorldManager {
         return packet
     }
 
-    private fun updateDuplicate(fake: FakeEntity, location: CyclicLocation, oldLocation: CyclicLocation): List<PacketContainer> {
+    private fun updateFake(fake: FakeEntity, location: CyclicLocation, oldLocation: CyclicLocation): List<PacketContainer> {
         assert(location.world == oldLocation.world)
         // TODO velocity
         val protocol = ProtocolLibrary.getProtocolManager()
@@ -291,7 +284,7 @@ class WorldManager {
         return result
     }
 
-    private fun despawnDuplicate(fake: FakeEntity, viewer: Player): PacketContainer {
+    private fun despawnFake(fake: FakeEntity, viewer: Player): PacketContainer {
         val protocol = ProtocolLibrary.getProtocolManager()
         val packet = protocol.createPacket(ENTITY_DESTROY)
         val entityId = fakeIds[fake]!!
@@ -302,7 +295,7 @@ class WorldManager {
         if (visibility[fake].isEmpty()) {
             val removedId = fakeIds.remove(fake)
             assert(removedId)
-            val wasInMap = dupMap[entity]!!.remove(fake)
+            val wasInMap = fakeMap.remove(entity, fake)
             assert(wasInMap)
         }
         return packet

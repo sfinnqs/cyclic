@@ -28,11 +28,12 @@
  * but you may omit source code from the "Minecraft: Java Edition" server from
  * the available Corresponding Source.
  */
-package org.sfinnqs.cyclic
+package org.sfinnqs.cyclic.manager
 
 import kotlinx.collections.immutable.toImmutableSet
 import net.jcip.annotations.NotThreadSafe
 import org.bukkit.entity.Player
+import org.sfinnqs.cyclic.FakeEntity
 import java.util.*
 
 @NotThreadSafe

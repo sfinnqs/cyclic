@@ -28,40 +28,14 @@
  * but you may omit source code from the "Minecraft: Java Edition" server from
  * the available Corresponding Source.
  */
-package org.sfinnqs.cyclic
+package org.sfinnqs.cyclic.world
 
-import net.jcip.annotations.NotThreadSafe
-
-@NotThreadSafe
-class FakeIds {
-    private val entityList = mutableListOf<FakeEntity?>()
-    private val entityIds = mutableMapOf<FakeEntity, Int>()
-
-    operator fun get(fake: FakeEntity) = entityIds[fake]
-
-    fun getOrCreate(fake: FakeEntity): Int {
-        val existingId = entityIds[fake]
-        if (existingId != null) return existingId
-        for (i in 0..entityList.size) {
-            val storedDuplicate = entityList.getOrNull(i)
-            if (storedDuplicate == null) {
-                if (i == entityList.size)
-                    entityList.add(fake)
-                else
-                    entityList[i] = fake
-                val entityId = Int.MAX_VALUE - i
-                entityIds[fake] = entityId
-                return entityId
-            }
-        }
-        // TODO more elegant way?
-        throw AssertionError()
-    }
-
-    fun remove(fake: FakeEntity): Boolean {
-        val eid = entityIds.remove(fake) ?: return false
-        val formerFake = entityList.set(Int.MAX_VALUE - eid, null)
-        assert(formerFake == fake)
-        return true
+data class RepresentativeChunk(val world: CyclicWorld, val coords: ChunkCoords) {
+    init {
+        val config = world.config
+        if (coords.x !in 0 until config.xChunks)
+            throw IllegalArgumentException("x is out of bounds")
+        if (coords.z !in 0 until config.zChunks)
+            throw IllegalArgumentException("z is out of bounds")
     }
 }

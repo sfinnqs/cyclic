@@ -28,29 +28,41 @@
  * but you may omit source code from the "Minecraft: Java Edition" server from
  * the available Corresponding Source.
  */
-package org.sfinnqs.cyclic.world
+package org.sfinnqs.cyclic.manager
 
-import net.jcip.annotations.Immutable
-import org.bukkit.block.Block
-import java.lang.Math.floorMod
+import net.jcip.annotations.NotThreadSafe
+import org.sfinnqs.cyclic.FakeEntity
 
-@Immutable
-data class CyclicBlock(val world: CyclicWorld, val x: Int, val y: Int, val z: Int) {
-    constructor(world: CyclicWorld, block: Block) : this(world, block.x, block.y, block.z)
+@NotThreadSafe
+class FakeIds {
+    private val entityList = mutableListOf<FakeEntity?>()
+    private val entityIds = mutableMapOf<FakeEntity, Int>()
 
-    val chunk = CyclicChunk(world, x shr 4, z shr 4)
+    operator fun get(fake: FakeEntity) = entityIds[fake]
 
-    val isRepresentative: Boolean
-        get() {
-            val config = world.config
-            return x in 0 until config.maxX && z in 0 until config.maxZ
+    fun getOrCreate(fake: FakeEntity): Int {
+        val existingId = entityIds[fake]
+        if (existingId != null) return existingId
+        for (i in 0..entityList.size) {
+            val storedDuplicate = entityList.getOrNull(i)
+            if (storedDuplicate == null) {
+                if (i == entityList.size)
+                    entityList.add(fake)
+                else
+                    entityList[i] = fake
+                val entityId = Int.MAX_VALUE - i
+                entityIds[fake] = entityId
+                return entityId
+            }
         }
+        // TODO more elegant way?
+        throw AssertionError()
+    }
 
-    val representative: CyclicBlock
-        get() {
-            val config = world.config
-            val newX = floorMod(x, config.maxX)
-            val newZ = floorMod(z, config.maxZ)
-            return copy(x = newX, z = newZ)
-        }
+    fun remove(fake: FakeEntity): Boolean {
+        val eid = entityIds.remove(fake) ?: return false
+        val formerFake = entityList.set(Int.MAX_VALUE - eid, null)
+        assert(formerFake == fake)
+        return true
+    }
 }

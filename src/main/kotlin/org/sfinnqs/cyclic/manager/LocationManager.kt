@@ -28,29 +28,32 @@
  * but you may omit source code from the "Minecraft: Java Edition" server from
  * the available Corresponding Source.
  */
-package org.sfinnqs.cyclic.world
+package org.sfinnqs.cyclic.manager
 
-import net.jcip.annotations.Immutable
-import org.bukkit.block.Block
-import java.lang.Math.floorMod
+import kotlinx.collections.immutable.toImmutableMap
+import net.jcip.annotations.NotThreadSafe
+import org.sfinnqs.cyclic.world.CyclicLocation
+import org.sfinnqs.cyclic.world.RepresentativeChunk
+import java.util.*
 
-@Immutable
-data class CyclicBlock(val world: CyclicWorld, val x: Int, val y: Int, val z: Int) {
-    constructor(world: CyclicWorld, block: Block) : this(world, block.x, block.y, block.z)
+@NotThreadSafe
+class LocationManager {
 
-    val chunk = CyclicChunk(world, x shr 4, z shr 4)
+    private val entityLocs = mutableMapOf<UUID, CyclicLocation>()
+    private val chunkEntities = mutableMapOf<RepresentativeChunk, MutableMap<UUID, CyclicLocation>>()
 
-    val isRepresentative: Boolean
-        get() {
-            val config = world.config
-            return x in 0 until config.maxX && z in 0 until config.maxZ
-        }
+    operator fun get(entity: UUID) = entityLocs[entity]
+    operator fun set(entity: UUID, location: CyclicLocation?): CyclicLocation? {
+        val old = if (location == null)
+            entityLocs.remove(entity)
+        else
+            entityLocs.put(entity, location)
+        if (old != null)
+            chunkEntities[old.chunk.representative]!!.remove(entity)
+        if (location != null)
+            chunkEntities.getOrPut(location.chunk.representative, ::mutableMapOf)[entity] = location
+        return old
+    }
 
-    val representative: CyclicBlock
-        get() {
-            val config = world.config
-            val newX = floorMod(x, config.maxX)
-            val newZ = floorMod(z, config.maxZ)
-            return copy(x = newX, z = newZ)
-        }
+    operator fun get(chunk: RepresentativeChunk) = chunkEntities[chunk].orEmpty().toImmutableMap()
 }

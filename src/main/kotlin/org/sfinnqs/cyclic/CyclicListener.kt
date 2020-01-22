@@ -79,8 +79,8 @@ class CyclicListener(private val plugin: Cyclic) : Listener {
             return
         }
         chunk.isForceLoaded = false
-        val sourceLocation = chunkLocation.representative
-        val source = world.getChunkAt(sourceLocation.x, sourceLocation.z)
+        val sourceCoords = chunkLocation.representative.coords
+        val source = world.getChunkAt(sourceCoords.x, sourceCoords.z)
         val sourceSections = (source as CraftChunk).handle.sections
         if ((chunk as CraftChunk).handle.sections === sourceSections) return
 

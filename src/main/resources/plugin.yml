@@ -1,7 +1,7 @@
 name: Cyclic
 version: ${project.version}
-main: com.voichick.cyclic.Cyclic
+main: org.sfinnqs.cyclic.Cyclic
 load: STARTUP
-api-version: "1.14"
+api-version: "1.15"
 depend:
   - ProtocolLib

@@ -36,6 +36,7 @@ import org.bukkit.configuration.ConfigurationSection
 import org.bukkit.plugin.java.JavaPlugin
 import org.sfinnqs.cyclic.config.CyclicConfig
 import org.sfinnqs.cyclic.gen.CyclicGenerator
+import org.sfinnqs.cyclic.manager.WorldManager
 
 @NotThreadSafe
 class Cyclic : JavaPlugin() {

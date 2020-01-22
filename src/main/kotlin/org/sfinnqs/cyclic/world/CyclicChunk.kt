@@ -34,28 +34,27 @@ import net.jcip.annotations.Immutable
 import org.bukkit.Chunk
 import java.lang.Math.floorMod
 
-// TODO use ChunkLocation
 @Immutable
 data class CyclicChunk(val world: CyclicWorld, val coords: ChunkCoords) {
+    constructor(world: CyclicWorld, x: Int, z: Int) : this(world, ChunkCoords(x, z))
     constructor(world: CyclicWorld, chunk: Chunk) : this(world, ChunkCoords(chunk))
+
+    val representative: RepresentativeChunk
+
+    init {
+        val config = world.config
+        representative = RepresentativeChunk(world, ChunkCoords(floorMod(coords.x, config.xChunks), floorMod(coords.z, config.zChunks)))
+    }
 
     // TODO maybe get rid of these?
     val x
-    get() = coords.x
+        get() = coords.x
 
     val z
-    get() = coords.z
+        get() = coords.z
 
     val isRepresentative = world.config.isChunkRepresentative(coords)
 
-    val representative: CyclicChunk
-    get() {
-        val config = world.config
-        return copy(coords = ChunkCoords(floorMod(coords.x, config.xChunks), floorMod(coords.z, config.zChunks)))
-    }
-
     fun equalsParallel(other: CyclicChunk) = representative == other.representative
-
-    fun setWorld(world: CyclicWorld) = copy(world = world)
 
 }
