@@ -33,12 +33,14 @@ package org.sfinnqs.cyclic.manager
 import com.comphenix.protocol.PacketType.Play.Server.*
 import com.comphenix.protocol.ProtocolLibrary
 import com.comphenix.protocol.events.PacketContainer
+import com.comphenix.protocol.wrappers.WrappedDataWatcher
 import com.google.common.collect.HashMultimap
 import com.google.common.collect.SetMultimap
 import net.jcip.annotations.ThreadSafe
 import org.bukkit.Bukkit
 import org.bukkit.entity.Player
 import org.sfinnqs.cyclic.FakeEntity
+import org.sfinnqs.cyclic.logger
 import org.sfinnqs.cyclic.world.ChunkCoords
 import org.sfinnqs.cyclic.world.CyclicChunk
 import org.sfinnqs.cyclic.world.CyclicLocation
@@ -91,7 +93,10 @@ class WorldManager {
                 val newZ = location.z + offsetZ * worldConfig.maxZ
                 assert(location.world == world)
                 val newLocation = location.copy(x = newX, z = newZ)
-                packets.add(PacketToSend(viewer, spawnFake(fake, viewer, newLocation)))
+                val newPackets = spawnFake(fake, viewer, newLocation).map {
+                    PacketToSend(viewer, it)
+                }
+                packets.addAll(newPackets)
             }
         }
         for (packet in packets)
@@ -158,7 +163,10 @@ class WorldManager {
                             packets.addAll(updateFake(fake, newLocation, oldFakeLoc).map { PacketToSend(viewer, it) })
                         } else {
                             // fake must be spawned
-                            packets.add(PacketToSend(viewer, spawnFake(fake, viewer, newLocation)))
+                            val newPackets = spawnFake(fake, viewer, newLocation).map {
+                                PacketToSend(viewer, it)
+                            }
+                            packets.addAll(newPackets)
                         }
                     }
                 }
@@ -193,14 +201,15 @@ class WorldManager {
         return result
     }
 
-    private fun spawnFake(fake: FakeEntity, viewer: Player, location: CyclicLocation): PacketContainer {
+    private fun spawnFake(fake: FakeEntity, viewer: Player, location: CyclicLocation): List<PacketContainer> {
         // TODO maybe combine the three methods somehow?
         val uuid = fake.entity
         visibility.add(viewer, fake)
         val protocol = ProtocolLibrary.getProtocolManager()
         val packet = protocol.createPacket(NAMED_ENTITY_SPAWN)
         fakeMap.put(uuid, fake)
-        packet.integers.write(0, fakeIds.getOrCreate(fake))
+        val eid = fakeIds.getOrCreate(fake)
+        packet.integers.write(0, eid)
         packet.uuiDs.write(0, uuid)
         val doubles = packet.doubles
         doubles.write(0, location.x)
@@ -210,16 +219,18 @@ class WorldManager {
         bytes.write(0, location.yawByte)
         bytes.write(1, location.pitchByte)
 
-        // TODO get this part to work
         // https://www.spigotmc.org/threads/metadata-protocollib.251684/#post-2513571
-//        val watcher = WrappedDataWatcher()
-//        watcher.entity = viewer
-//        val serializer = WrappedDataWatcher.Registry.get(java.lang.Byte::class.java)
-//        val skinParts: Byte = 0x7f
-//        watcher.setObject(15, serializer, skinParts)
-//        packet.dataWatcherModifier.write(0, watcher)
+        val skinPacket = protocol.createPacket(ENTITY_METADATA)
+        val watcher = WrappedDataWatcher()
+        watcher.entity = viewer
+        val serializer = WrappedDataWatcher.Registry.get(java.lang.Byte::class.java)
+        val skinParts: Byte = 0x7f
+        watcher.setObject(16, serializer, skinParts)
+        skinPacket.integers.write(0, eid)
+        skinPacket.watchableCollectionModifier.write(0, watcher.watchableObjects)
+        // TODO add more metadata
 
-        return packet
+        return listOf(packet, skinPacket)
     }
 
     private fun updateFake(fake: FakeEntity, location: CyclicLocation, oldLocation: CyclicLocation): List<PacketContainer> {
