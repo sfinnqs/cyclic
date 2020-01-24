@@ -28,11 +28,10 @@
  * but you may omit source code from the "Minecraft: Java Edition" server from
  * the available Corresponding Source.
  */
-package org.sfinnqs.cyclic.world
+package org.sfinnqs.cyclic.collect
 
-import net.jcip.annotations.Immutable
-import org.sfinnqs.cyclic.config.WorldConfig
-import java.util.*
+import com.google.common.collect.MapMaker
+import net.jcip.annotations.ThreadSafe
 
-@Immutable
-data class CyclicWorld(val id: UUID, val name: String, val config: WorldConfig)
+@ThreadSafe
+class WeakMap<K, V>: MutableMap<K, V> by MapMaker().weakKeys().makeMap()

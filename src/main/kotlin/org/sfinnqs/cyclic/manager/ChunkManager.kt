@@ -35,6 +35,8 @@ import com.google.common.collect.SetMultimap
 import kotlinx.collections.immutable.toImmutableSet
 import net.jcip.annotations.NotThreadSafe
 import org.bukkit.entity.Player
+import org.sfinnqs.cyclic.collect.WeakMap
+import org.sfinnqs.cyclic.collect.WeakSet
 import org.sfinnqs.cyclic.world.CyclicChunk
 import org.sfinnqs.cyclic.world.RepresentativeChunk
 import java.util.*
@@ -42,22 +44,31 @@ import java.util.*
 @NotThreadSafe
 class ChunkManager {
 
-    private val all = WeakHashMap<Player, MutableSet<CyclicChunk>>()
-    private val representatives = WeakHashMap<Player, SetMultimap<RepresentativeChunk, CyclicChunk>>()
+    private val all = WeakMap<Player, MutableSet<CyclicChunk>>()
+    private val reps =
+        WeakMap<Player, SetMultimap<RepresentativeChunk, CyclicChunk>>()
 
-    val viewers: Set<Player> = Collections.unmodifiableSet(all.keys)
+    val viewers: Set<Player>
+        get() {
+            val result = WeakSet<Player>()
+            result.addAll(all.keys)
+            return Collections.unmodifiableSet(result)
+        }
 
-    operator fun get(viewer: Player) = all[viewer].orEmpty().toImmutableSet()
-    operator fun get(viewer: Player, chunk: RepresentativeChunk) = representatives[viewer]?.get(chunk).orEmpty().toImmutableSet()
+    operator fun get(viewer: Player, chunk: RepresentativeChunk? = null) =
+        if (chunk == null)
+            all[viewer].orEmpty().toImmutableSet()
+        else
+            reps[viewer]?.get(chunk).orEmpty().toImmutableSet()
 
-    fun contains(viewer: Player, chunk: CyclicChunk) = all[viewer]?.contains(chunk)
-            ?: false
+    fun contains(viewer: Player, chunk: CyclicChunk) =
+        all[viewer]?.contains(chunk) ?: false
 
     fun add(viewer: Player, chunk: CyclicChunk): Boolean {
         val addedToAll = all.computeIfAbsent(viewer) {
             mutableSetOf()
         }.add(chunk)
-        val addedToReps = representatives.computeIfAbsent(viewer) {
+        val addedToReps = reps.computeIfAbsent(viewer) {
             HashMultimap.create()
         }.put(chunk.representative, chunk)
         assert(addedToAll == addedToReps)
@@ -65,10 +76,29 @@ class ChunkManager {
     }
 
     fun remove(viewer: Player, chunk: CyclicChunk): Boolean {
-        val removedFromAll = all[viewer]?.remove(chunk) ?: false
-        val removedFromReps = representatives[viewer]?.remove(chunk.representative, chunk) ?: false
-        assert(removedFromAll == removedFromReps)
-        return removedFromAll
+        val seenGroups = reps[viewer]
+        if (seenGroups == null) {
+            assert(all[viewer]?.contains(chunk) != true)
+            return false
+        }
+        assert(!seenGroups.isEmpty)
+        if (seenGroups.remove(chunk.representative, chunk)) {
+            if (seenGroups.isEmpty) {
+                val removedReps = reps.remove(viewer)
+                assert(removedReps == seenGroups)
+            }
+            val seenChunks = all[viewer]!!
+            val removedSeenChunks = seenChunks.remove(chunk)
+            assert(removedSeenChunks)
+            if (seenChunks.isEmpty()) {
+                val removedAll = all.remove(viewer)
+                assert(removedAll == seenChunks)
+            }
+            return true
+        } else {
+            assert(all[viewer]?.contains(chunk) != true)
+            return false
+        }
     }
 
 }

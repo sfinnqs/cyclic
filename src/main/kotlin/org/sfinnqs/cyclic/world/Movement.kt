@@ -31,8 +31,6 @@
 package org.sfinnqs.cyclic.world
 
 import net.jcip.annotations.Immutable
-import org.sfinnqs.cyclic.config.WorldConfig
-import java.util.*
 
 @Immutable
-data class CyclicWorld(val id: UUID, val name: String, val config: WorldConfig)
+data class Movement(val deltaX: Short, val deltaY: Short, val deltaZ: Short)

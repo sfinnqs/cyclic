@@ -28,11 +28,11 @@
  * but you may omit source code from the "Minecraft: Java Edition" server from
  * the available Corresponding Source.
  */
-package org.sfinnqs.cyclic.world
+package org.sfinnqs.cyclic.collect
 
-import net.jcip.annotations.Immutable
-import org.sfinnqs.cyclic.config.WorldConfig
+import net.jcip.annotations.ThreadSafe
 import java.util.*
 
-@Immutable
-data class CyclicWorld(val id: UUID, val name: String, val config: WorldConfig)
+@ThreadSafe
+class WeakSet<E> :
+    MutableSet<E> by Collections.newSetFromMap(WeakMap<E, Boolean>())

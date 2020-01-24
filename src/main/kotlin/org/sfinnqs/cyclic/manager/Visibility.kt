@@ -30,35 +30,48 @@
  */
 package org.sfinnqs.cyclic.manager
 
+import com.google.common.collect.HashMultimap
+import com.google.common.collect.SetMultimap
 import kotlinx.collections.immutable.toImmutableSet
 import net.jcip.annotations.NotThreadSafe
 import org.bukkit.entity.Player
 import org.sfinnqs.cyclic.FakeEntity
+import org.sfinnqs.cyclic.collect.WeakMap
+import org.sfinnqs.cyclic.collect.WeakSet
 import java.util.*
 
 @NotThreadSafe
 class Visibility {
-    private val seenBy = mutableMapOf<FakeEntity, MutableSet<Player>>()
-    private val canSee = WeakHashMap<Player, MutableMap<UUID, MutableSet<FakeEntity>>>()
+    private val seenBy = mutableMapOf<FakeEntity, WeakSet<Player>>()
+    private val canSee = WeakMap<Player, SetMultimap<UUID, FakeEntity>>()
 
     fun add(viewer: Player, fake: FakeEntity): Boolean {
         val id = fake.entity
-        val addedSeenBy = seenBy.getOrPut(fake) {
-            Collections.newSetFromMap(WeakHashMap<Player, Boolean>())
-        }.add(viewer)
+        val addedSeenBy = seenBy.getOrPut(fake, ::WeakSet).add(viewer)
         return if (addedSeenBy) {
-            val addedCanSee = canSee.getOrPut(viewer, ::mutableMapOf).getOrPut(id, ::mutableSetOf).add(fake)
+            val playerMap = canSee.getOrPut(viewer) { HashMultimap.create() }
+            val addedCanSee = playerMap.put(id, fake)
             assert(addedCanSee)
             true
         } else {
-            assert(canSee[viewer]!![id]!!.contains(fake))
+            assert(fake in canSee[viewer]!![id]!!)
             false
         }
     }
 
-    operator fun get(viewer: Player, entity: UUID) = canSee[viewer]?.get(entity).orEmpty().toImmutableSet()
+    operator fun get(viewer: Player, entity: UUID): Set<FakeEntity> =
+        canSee[viewer]?.get(entity).orEmpty().toImmutableSet()
 
-    operator fun get(fake: FakeEntity) = seenBy[fake].orEmpty().toImmutableSet()
+    operator fun get(fake: FakeEntity): Set<Player> {
+        val contents = seenBy[fake]
+        return if (contents.isNullOrEmpty()) {
+            emptySet()
+        } else {
+            val result = WeakSet<Player>()
+            result.addAll(contents)
+            Collections.unmodifiableSet(result)
+        }
+    }
 
     fun remove(viewer: Player, fake: FakeEntity): Boolean {
         val seenFakes = canSee[viewer]
@@ -66,28 +79,23 @@ class Visibility {
             assert(seenBy[fake]?.contains(viewer) != true)
             return false
         }
-        assert(seenFakes.isNotEmpty())
-        val id = fake.entity
-        val seenIdFakes = seenFakes[id]
-        if (seenIdFakes == null) {
-            assert(seenBy[fake]?.contains(viewer) != true)
-            return false
-        }
-        assert(seenIdFakes.isNotEmpty())
-        val removedCanSee = seenIdFakes.remove(fake)
-        return if (removedCanSee) {
-            if (seenIdFakes.isEmpty())
-                if (seenFakes.remove(id) != null && seenFakes.isEmpty())
-                    canSee.remove(viewer)
+        assert(!seenFakes.isEmpty)
+        if (seenFakes.remove(fake.entity, fake)) {
+            if (seenFakes.isEmpty) {
+                val removedCanSee = canSee.remove(viewer)
+                assert(removedCanSee == seenFakes)
+            }
             val viewers = seenBy[fake]!!
-            val removedSeenBy = viewers.remove(viewer)
-            assert(removedSeenBy)
-            if (viewers.isEmpty())
-                seenBy.remove(fake)
-            true
+            val removedViewers = viewers.remove(viewer)
+            assert(removedViewers)
+            if (viewers.isEmpty()) {
+                val removedSeenBy = seenBy.remove(fake)
+                assert(removedSeenBy == viewers)
+            }
+            return true
         } else {
             assert(seenBy[fake]?.contains(viewer) != true)
-            false
+            return false
         }
     }
 }

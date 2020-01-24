@@ -56,10 +56,12 @@ class Cyclic : JavaPlugin() {
 
     override fun onEnable() {
         server.pluginManager.registerEvents(CyclicListener(this), this)
-        ProtocolLibrary.getProtocolManager().addPacketListener(CyclicAdapter(this))
+        val protocol = ProtocolLibrary.getProtocolManager()
+        protocol.addPacketListener(CyclicAdapter(this))
     }
 
-    override fun getDefaultWorldGenerator(worldName: String, id: String?) = CyclicGenerator(cyclicConfig.worlds[worldName])
+    override fun getDefaultWorldGenerator(worldName: String, id: String?) =
+        CyclicGenerator(cyclicConfig.worlds[worldName])
 
     private companion object {
         fun ConfigurationSection.setAll(map: Map<String, Any>) {

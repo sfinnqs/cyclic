@@ -30,7 +30,7 @@
  */
 package org.sfinnqs.cyclic.config
 
-import org.sfinnqs.cyclic.world.ChunkCoords
+import kotlinx.collections.immutable.toImmutableMap
 import net.jcip.annotations.Immutable
 import org.bukkit.configuration.ConfigurationSection
 import org.bukkit.configuration.InvalidConfigurationException
@@ -55,10 +55,8 @@ data class WorldConfig(val maxX: Int, val maxZ: Int) {
         val result = mutableMapOf<String, Any>("max x" to maxX, "max z" to maxZ)
         if (world != null)
             result["id"] = world.toString()
-        return result
+        return result.toImmutableMap()
     }
-
-    fun isChunkRepresentative(coords: ChunkCoords) = coords.x in 0 until xChunks && coords.z in 0 until zChunks
 
     private companion object {
 

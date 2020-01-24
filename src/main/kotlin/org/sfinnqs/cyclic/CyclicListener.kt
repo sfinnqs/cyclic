@@ -32,13 +32,7 @@ package org.sfinnqs.cyclic
 
 import com.comphenix.protocol.PacketType.Play.Server.BLOCK_CHANGE
 import com.comphenix.protocol.ProtocolLibrary
-import com.comphenix.protocol.wrappers.BlockPosition
 import com.comphenix.protocol.wrappers.WrappedBlockData
-import org.sfinnqs.cyclic.gen.CyclicGenerator
-import org.sfinnqs.cyclic.world.CyclicBlock
-import org.sfinnqs.cyclic.world.CyclicChunk
-import org.sfinnqs.cyclic.world.CyclicLocation
-import org.sfinnqs.cyclic.world.CyclicWorld
 import net.jcip.annotations.NotThreadSafe
 import org.bukkit.Location
 import org.bukkit.Material.*
@@ -57,6 +51,8 @@ import org.bukkit.event.block.*
 import org.bukkit.event.player.*
 import org.bukkit.event.world.ChunkLoadEvent
 import org.bukkit.event.world.ChunkUnloadEvent
+import org.sfinnqs.cyclic.gen.CyclicGenerator
+import org.sfinnqs.cyclic.world.*
 import java.lang.reflect.Field
 import java.lang.reflect.Modifier.FINAL
 
@@ -65,7 +61,8 @@ class CyclicListener(private val plugin: Cyclic) : Listener {
 
     @EventHandler(priority = MONITOR)
     fun onPlayerLogin(event: PlayerLoginEvent) {
-        plugin.manager.addPlayer(event.player)
+        val player = event.player
+        plugin.manager.addPlayer(player, player.uniqueId)
     }
 
     @EventHandler(priority = LOWEST)
@@ -73,7 +70,7 @@ class CyclicListener(private val plugin: Cyclic) : Listener {
         val world = event.world
         val cyclicWorld = event.world.cyclicWorld ?: return
         val chunk = event.chunk
-        val chunkLocation = CyclicChunk(cyclicWorld, chunk)
+        val chunkLocation = CyclicChunk(cyclicWorld, ChunkCoords(chunk))
         if (chunkLocation.isRepresentative) {
             chunk.isForceLoaded = true
             return
@@ -85,7 +82,8 @@ class CyclicListener(private val plugin: Cyclic) : Listener {
         if ((chunk as CraftChunk).handle.sections === sourceSections) return
 
         // https://stackoverflow.com/a/3301720
-        val field = net.minecraft.server.v1_15_R1.Chunk::class.java.getDeclaredField("sections")
+        val chunkClass = net.minecraft.server.v1_15_R1.Chunk::class.java
+        val field = chunkClass.getDeclaredField("sections")
         val accessible = field.isAccessible
         field.isAccessible = true
         try {
@@ -119,7 +117,8 @@ class CyclicListener(private val plugin: Cyclic) : Listener {
     fun onPlayerMove(event: PlayerMoveEvent) {
         val player = event.player
         val world = player.world.cyclicWorld ?: return
-        plugin.manager.setLocation(player.uniqueId, CyclicLocation(world, player))
+        val location = CyclicLocation(world, player)
+        plugin.manager.setLocation(player.uniqueId, location)
     }
 
     @EventHandler(priority = LOWEST, ignoreCancelled = true)
@@ -278,10 +277,14 @@ class CyclicListener(private val plugin: Cyclic) : Listener {
     fun onChunkUnload(event: ChunkUnloadEvent) {
         val chunk = event.chunk
         val world = event.world.cyclicWorld ?: return
-        event.isSaveChunk = CyclicChunk(world, chunk).isRepresentative
+        val cyclicChunk = CyclicChunk(world, ChunkCoords(chunk))
+        event.isSaveChunk = cyclicChunk.isRepresentative
     }
 
-    private fun getRepresentativeLocation(world: CyclicWorld, entity: Entity): Location {
+    private fun getRepresentativeLocation(
+        world: CyclicWorld,
+        entity: Entity
+    ): Location {
         val bukkitWorld = entity.world
         assert(bukkitWorld.uid == world.id)
         val result = CyclicLocation(world, entity).representative
@@ -289,18 +292,17 @@ class CyclicListener(private val plugin: Cyclic) : Listener {
     }
 
     private fun sendBlockUpdate(block: CyclicBlock, data: BlockData) {
-        val chunk = block.chunk
+        val blockChunk = block.chunk
+        val representative = blockChunk.representative
         val protocol = ProtocolLibrary.getProtocolManager()
         for (player in plugin.server.onlinePlayers) {
-            val chunks = plugin.manager.getLoadedChunks(player)
+            val chunks = plugin.manager.getLoadedChunks(player, representative)
             for (otherChunk in chunks) {
-                if (otherChunk == chunk || !otherChunk.equalsParallel(chunk)) continue
+                if (otherChunk == blockChunk) continue
                 val packet = protocol.createPacket(BLOCK_CHANGE)
                 packet.blockData.write(0, WrappedBlockData.createData(data))
-                // TODO consider a ChunkOffset class for simplification
-                val newX = block.x + ((otherChunk.x - chunk.x) shl 4)
-                val newZ = block.z + ((otherChunk.z - chunk.z) shl 4)
-                val newPosition = BlockPosition(newX, block.y, newZ)
+                val newBlock = block + (otherChunk - blockChunk)
+                val newPosition = newBlock.toBlockPosition()
                 packet.blockPositionModifier.write(0, newPosition)
                 protocol.sendServerPacket(player, packet)
             }

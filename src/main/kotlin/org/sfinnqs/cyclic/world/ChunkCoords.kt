@@ -30,8 +30,15 @@
  */
 package org.sfinnqs.cyclic.world
 
+import net.jcip.annotations.Immutable
 import org.bukkit.Chunk
+import org.sfinnqs.cyclic.config.WorldConfig
 
+@Immutable
 data class ChunkCoords(val x: Int, val z: Int) {
     constructor(chunk: Chunk) : this(chunk.x, chunk.z)
+
+    fun isRepresentative(config: WorldConfig) =
+        x in 0 until config.xChunks && z in 0 until config.zChunks
+
 }

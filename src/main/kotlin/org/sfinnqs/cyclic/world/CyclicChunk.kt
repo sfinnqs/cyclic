@@ -31,30 +31,35 @@
 package org.sfinnqs.cyclic.world
 
 import net.jcip.annotations.Immutable
-import org.bukkit.Chunk
 import java.lang.Math.floorMod
 
 @Immutable
 data class CyclicChunk(val world: CyclicWorld, val coords: ChunkCoords) {
-    constructor(world: CyclicWorld, x: Int, z: Int) : this(world, ChunkCoords(x, z))
-    constructor(world: CyclicWorld, chunk: Chunk) : this(world, ChunkCoords(chunk))
 
     val representative: RepresentativeChunk
 
     init {
         val config = world.config
-        representative = RepresentativeChunk(world, ChunkCoords(floorMod(coords.x, config.xChunks), floorMod(coords.z, config.zChunks)))
+        val repX = floorMod(coords.x, config.xChunks)
+        val repZ = floorMod(coords.z, config.zChunks)
+        val coords = ChunkCoords(repX, repZ)
+        representative = RepresentativeChunk(world, coords)
     }
 
-    // TODO maybe get rid of these?
-    val x
-        get() = coords.x
+    val isRepresentative = coords.isRepresentative(world.config)
 
-    val z
-        get() = coords.z
-
-    val isRepresentative = world.config.isChunkRepresentative(coords)
-
-    fun equalsParallel(other: CyclicChunk) = representative == other.representative
+    operator fun minus(other: CyclicChunk): WorldOffset {
+        if (world != other.world)
+            throw IllegalArgumentException("other must be from the same world")
+        val config = world.config
+        val xChunks = config.xChunks
+        val zChunks = config.zChunks
+        val otherCoords = other.coords
+        val deltaX = coords.x - otherCoords.x
+        val deltaZ = coords.z - otherCoords.z
+        if (deltaX % xChunks != 0 || deltaZ % zChunks != 0)
+            throw IllegalArgumentException("these chunks are not equivalent")
+        return WorldOffset(deltaX / xChunks, deltaZ / zChunks)
+    }
 
 }

@@ -40,7 +40,8 @@ import java.util.*
 class LocationManager {
 
     private val entityLocs = mutableMapOf<UUID, CyclicLocation>()
-    private val chunkEntities = mutableMapOf<RepresentativeChunk, MutableMap<UUID, CyclicLocation>>()
+    private val chunkEntities =
+        mutableMapOf<RepresentativeChunk, MutableMap<UUID, CyclicLocation>>()
 
     operator fun get(entity: UUID) = entityLocs[entity]
     operator fun set(entity: UUID, location: CyclicLocation?): CyclicLocation? {
@@ -50,10 +51,14 @@ class LocationManager {
             entityLocs.put(entity, location)
         if (old != null)
             chunkEntities[old.chunk.representative]!!.remove(entity)
-        if (location != null)
-            chunkEntities.getOrPut(location.chunk.representative, ::mutableMapOf)[entity] = location
+        if (location != null) {
+            val rep = location.chunk.representative
+            val chunkMap = chunkEntities.getOrPut(rep, ::mutableMapOf)
+            chunkMap[entity] = location
+        }
         return old
     }
 
-    operator fun get(chunk: RepresentativeChunk) = chunkEntities[chunk].orEmpty().toImmutableMap()
+    operator fun get(chunk: RepresentativeChunk): Map<UUID, CyclicLocation> =
+        chunkEntities[chunk].orEmpty().toImmutableMap()
 }

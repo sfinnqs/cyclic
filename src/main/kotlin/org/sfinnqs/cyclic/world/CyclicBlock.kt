@@ -30,15 +30,27 @@
  */
 package org.sfinnqs.cyclic.world
 
+import com.comphenix.protocol.wrappers.BlockPosition
 import net.jcip.annotations.Immutable
 import org.bukkit.block.Block
 import java.lang.Math.floorMod
 
 @Immutable
-data class CyclicBlock(val world: CyclicWorld, val x: Int, val y: Int, val z: Int) {
-    constructor(world: CyclicWorld, block: Block) : this(world, block.x, block.y, block.z)
+data class CyclicBlock(
+    val world: CyclicWorld,
+    val x: Int,
+    val y: Int,
+    val z: Int
+) {
 
-    val chunk = CyclicChunk(world, x shr 4, z shr 4)
+    constructor(world: CyclicWorld, block: Block) : this(
+        world,
+        block.x,
+        block.y,
+        block.z
+    )
+
+    val chunk = CyclicChunk(world, ChunkCoords(x shr 4, z shr 4))
 
     val isRepresentative: Boolean
         get() {
@@ -53,4 +65,14 @@ data class CyclicBlock(val world: CyclicWorld, val x: Int, val y: Int, val z: In
             val newZ = floorMod(z, config.maxZ)
             return copy(x = newX, z = newZ)
         }
+
+    operator fun plus(offset: WorldOffset): CyclicBlock {
+        val config = world.config
+        val newX = x + offset.deltaX * config.maxX
+        val newZ = z + offset.deltaZ * config.maxZ
+        return copy(x = newX, z = newZ)
+    }
+
+    fun toBlockPosition() = BlockPosition(x, y, z)
+
 }

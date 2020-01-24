@@ -30,11 +30,12 @@
  */
 package org.sfinnqs.cyclic.config
 
-import org.sfinnqs.cyclic.logger
+import kotlinx.collections.immutable.toImmutableMap
 import net.jcip.annotations.Immutable
 import org.bukkit.Server
 import org.bukkit.World
 import org.bukkit.configuration.ConfigurationSection
+import org.sfinnqs.cyclic.logger
 import java.util.*
 
 @Immutable
@@ -56,8 +57,8 @@ class WorldsConfig(config: ConfigurationSection, server: Server) {
             tempNames[id] = name
             tempIds[name] = id
         }
-        val tempNameWorlds = mutableMapOf<String, WorldConfig>()
         val tempIdWorlds = mutableMapOf<UUID, WorldConfig>()
+        val tempNameWorlds = mutableMapOf<String, WorldConfig>()
         for (name in config.getKeys(false)) {
             if (name == "default") continue
             if (!config.isConfigurationSection(name)) continue
@@ -77,21 +78,23 @@ class WorldsConfig(config: ConfigurationSection, server: Server) {
             val worldConfig = WorldConfig(section)
             tempNameWorlds[name] = worldConfig
             if (id != null) {
-                tempNames.putIfAbsent(id, name)
                 tempIdWorlds.putIfAbsent(id, worldConfig)
+                tempNames.putIfAbsent(id, name)
             }
         }
-        names = tempNames
-        ids = tempIds
-        nameWorlds = tempNameWorlds
-        idWorlds = tempIdWorlds
+        names = tempNames.toImmutableMap()
+        ids = tempIds.toImmutableMap()
+        idWorlds = tempIdWorlds.toImmutableMap()
+        nameWorlds = tempNameWorlds.toImmutableMap()
     }
 
-    operator fun get(world: UUID) = idWorlds[world] ?: nameWorlds[names[world]]
-    ?: default
+    operator fun get(world: UUID) = idWorlds[world]
+        ?: nameWorlds[names[world]]
+        ?: default
 
-    operator fun get(name: String) = nameWorlds[name] ?: idWorlds[ids[name]]
-    ?: default
+    operator fun get(name: String) = nameWorlds[name]
+        ?: idWorlds[ids[name]]
+        ?: default
 
     operator fun get(world: World): WorldConfig {
         val id = world.uid
@@ -113,7 +116,7 @@ class WorldsConfig(config: ConfigurationSection, server: Server) {
             }
         }
         result["default"] = default.toMap()
-        return result
+        return result.toImmutableMap()
     }
 
     private companion object {

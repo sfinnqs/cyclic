@@ -30,8 +30,6 @@
  */
 package org.sfinnqs.cyclic.gen
 
-import org.sfinnqs.cyclic.config.WorldConfig
-import org.sfinnqs.cyclic.world.ChunkCoords
 import net.jcip.annotations.Immutable
 import org.bukkit.Chunk
 import org.bukkit.Material.GRASS_BLOCK
@@ -39,18 +37,22 @@ import org.bukkit.TreeType.TREE
 import org.bukkit.World
 import org.bukkit.block.BlockFace.DOWN
 import org.bukkit.generator.BlockPopulator
+import org.sfinnqs.cyclic.config.WorldConfig
+import org.sfinnqs.cyclic.world.ChunkCoords
 import java.util.*
 
 @Immutable
 data class TreePopulator(val config: WorldConfig) : BlockPopulator() {
     override fun populate(world: World, random: Random, source: Chunk) {
-        if (!config.isChunkRepresentative(ChunkCoords(source))) return
-        random.setSeed(world.seed + source.x * config.zChunks + source.z)
+        if (!ChunkCoords(source).isRepresentative(config)) return
+        val chunkX = source.x
+        val chunkZ = source.z
+        random.setSeed(world.seed + chunkX * config.zChunks + chunkZ)
         for (localX in 0..15)
             for (localZ in 0..15) {
                 if (random.nextInt(200) != 0) continue
-                val treeX = (source.x shl 4) + localX
-                val treeZ = (source.z shl 4) + localZ
+                val treeX = localX + chunkX * 16
+                val treeZ = localZ + chunkZ * 16
                 val block = world.getHighestBlockAt(treeX, treeZ)
                 if (block.getRelative(DOWN).type == GRASS_BLOCK)
                     world.generateTree(block.location, TREE)

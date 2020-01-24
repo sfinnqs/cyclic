@@ -37,24 +37,31 @@ import com.comphenix.protocol.events.PacketContainer
 import com.comphenix.protocol.events.PacketEvent
 import com.comphenix.protocol.wrappers.EnumWrappers.PlayerInfoAction.ADD_PLAYER
 import com.comphenix.protocol.wrappers.EnumWrappers.PlayerInfoAction.REMOVE_PLAYER
-import com.google.common.collect.MapMaker
-import org.sfinnqs.cyclic.world.ChunkCoords
 import net.jcip.annotations.ThreadSafe
 import org.bukkit.entity.Player
+import org.sfinnqs.cyclic.collect.WeakMap
+import org.sfinnqs.cyclic.collect.WeakSet
+import org.sfinnqs.cyclic.world.ChunkCoords
 import java.util.*
-import java.util.concurrent.locks.ReentrantLock
 import java.util.concurrent.locks.ReentrantReadWriteLock
 import kotlin.concurrent.read
-import kotlin.concurrent.withLock
 import kotlin.concurrent.write
 
 @ThreadSafe
-class CyclicAdapter(private val cyclic: Cyclic) : PacketAdapter(cyclic, MAP_CHUNK, UNLOAD_CHUNK, NAMED_ENTITY_SPAWN, PLAYER_INFO) {
+class CyclicAdapter(private val cyclic: Cyclic) : PacketAdapter(
+    cyclic,
+    MAP_CHUNK,
+    UNLOAD_CHUNK,
+    NAMED_ENTITY_SPAWN,
+    PLAYER_INFO
+) {
 
-    private val customPackets = Collections.newSetFromMap(MapMaker().weakKeys().makeMap<Any, Boolean>())
+    private val customPackets =
+        WeakSet<Any>()
     private val lock = ReentrantReadWriteLock()
-    private val knownUuids = WeakHashMap<Player, MutableSet<UUID>>()
-    private val spawnQueue = WeakHashMap<Player, MutableMap<UUID, Queue<PacketContainer>>>()
+    private val knownIds = WeakMap<Player, MutableSet<UUID>>()
+    private val spawnQueue =
+        WeakMap<Player, MutableMap<UUID, Queue<PacketContainer>>>()
 
     override fun onPacketSending(event: PacketEvent) {
         val packet = event.packet
@@ -76,20 +83,25 @@ class CyclicAdapter(private val cyclic: Cyclic) : PacketAdapter(cyclic, MAP_CHUN
             NAMED_ENTITY_SPAWN -> {
                 if (cyclic.manager.getViewerWorld(player) == null) return
                 val uuid = packet.uuiDs.read(0)
-                if (uuid in lock.read{ knownUuids[player] }.orEmpty()) return
+                if (uuid in lock.read { knownIds[player] }.orEmpty()) return
                 lock.write {
-                    if (uuid in knownUuids[player].orEmpty()) return
-                    spawnQueue.getOrPut(player, ::mutableMapOf).getOrPut(uuid, ::LinkedList).add(packet)
+                    if (uuid in knownIds[player].orEmpty()) return
+                    spawnQueue.getOrPut(player, ::mutableMapOf)
+                        .getOrPut(uuid, ::LinkedList)
+                        .add(packet)
                     event.isCancelled = true
                 }
             }
             PLAYER_INFO -> {
-                val uuids = packet.playerInfoDataLists.read(0).map { it.profile.uuid }
+                val uuids = packet.playerInfoDataLists.read(0).map {
+                    it.profile.uuid
+                }
                 when (packet.playerInfoAction.read(0)) {
                     ADD_PLAYER -> {
                         val packets = mutableListOf<PacketContainer>()
                         lock.write {
-                            knownUuids.getOrPut(player, ::mutableSetOf).addAll(uuids)
+                            knownIds.getOrPut(player, ::mutableSetOf)
+                                .addAll(uuids)
                             val queues = spawnQueue[player] ?: return
                             for (uuid in uuids) {
                                 val queue = queues.remove(uuid) ?: continue
@@ -106,10 +118,8 @@ class CyclicAdapter(private val cyclic: Cyclic) : PacketAdapter(cyclic, MAP_CHUN
                         for (toSend in packets)
                             protocol.sendServerPacket(player, toSend)
                     }
-                    REMOVE_PLAYER -> {
-                        lock.write {
-                            knownUuids[player]?.removeAll(uuids)
-                        }
+                    REMOVE_PLAYER -> lock.write {
+                        knownIds[player]?.removeAll(uuids)
                     }
                     else -> return
                 }

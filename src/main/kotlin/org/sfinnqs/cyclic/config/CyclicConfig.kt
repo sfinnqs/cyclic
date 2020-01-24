@@ -30,6 +30,7 @@
  */
 package org.sfinnqs.cyclic.config
 
+import kotlinx.collections.immutable.toImmutableMap
 import net.jcip.annotations.Immutable
 import org.bukkit.Server
 import org.bukkit.configuration.Configuration
@@ -37,19 +38,24 @@ import org.bukkit.configuration.ConfigurationSection
 
 @Immutable
 data class CyclicConfig(val worlds: WorldsConfig) {
-    constructor(config: Configuration, server: Server) : this(WorldsConfig(config.getSectionOrSet("worlds"), server))
+    constructor(config: Configuration, server: Server) : this(
+        WorldsConfig(
+            config.getSectionOrSet("worlds"),
+            server
+        )
+    )
 
-    fun toMap() = mapOf("worlds" to worlds.toMap())
+    fun toMap() = mapOf("worlds" to worlds.toMap()).toImmutableMap()
 
     private companion object {
         fun ConfigurationSection.getSectionOrSet(path: String): ConfigurationSection {
             val result = getConfigurationSection(path)
-                    ?: return createSection(path)
+                ?: return createSection(path)
             return if (isSet(path) && isConfigurationSection(path)) {
                 result
             } else {
                 val default = result.defaultSection
-                        ?: return createSection(path)
+                    ?: return createSection(path)
                 createSection(path, default.getValues(true))
             }
         }

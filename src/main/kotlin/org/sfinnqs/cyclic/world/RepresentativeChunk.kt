@@ -30,7 +30,13 @@
  */
 package org.sfinnqs.cyclic.world
 
-data class RepresentativeChunk(val world: CyclicWorld, val coords: ChunkCoords) {
+import net.jcip.annotations.Immutable
+
+@Immutable
+data class RepresentativeChunk(
+    val world: CyclicWorld,
+    val coords: ChunkCoords
+) {
     init {
         val config = world.config
         if (coords.x !in 0 until config.xChunks)

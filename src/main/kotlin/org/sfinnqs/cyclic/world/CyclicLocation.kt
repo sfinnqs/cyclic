@@ -30,7 +30,6 @@
  */
 package org.sfinnqs.cyclic.world
 
-import org.sfinnqs.cyclic.LocationOffset
 import net.jcip.annotations.Immutable
 import org.bukkit.Location
 import org.bukkit.World
@@ -40,14 +39,39 @@ import org.bukkit.util.NumberConversions.round
 import kotlin.math.roundToLong
 
 @Immutable
-data class CyclicLocation(val world: CyclicWorld, val x: Double, val y: Double, val z: Double, val yaw: Float, val pitch: Float, val grounded: Boolean) {
+data class CyclicLocation(
+    val world: CyclicWorld,
+    val x: Double,
+    val y: Double,
+    val z: Double,
+    val yaw: Float,
+    val pitch: Float,
+    val grounded: Boolean
+) {
     val yawByte = angleFloatToByte(yaw)
     val pitchByte = angleFloatToByte(pitch)
     val block = CyclicBlock(world, floor(x), floor(y), floor(z))
     val chunk = block.chunk
 
-    constructor(world: CyclicWorld, location: Location, grounded: Boolean) : this(world, location.x, location.y, location.z, location.yaw, location.pitch, grounded)
-    constructor(world: CyclicWorld, entity: Entity) : this(world, entity.location, entity.isOnGround)
+    constructor(
+        world: CyclicWorld,
+        location: Location,
+        grounded: Boolean
+    ) : this(
+        world,
+        location.x,
+        location.y,
+        location.z,
+        location.yaw,
+        location.pitch,
+        grounded
+    )
+
+    constructor(world: CyclicWorld, entity: Entity) : this(
+        world,
+        entity.location,
+        entity.isOnGround
+    )
 
     val representative: CyclicLocation
         get() {
@@ -57,31 +81,38 @@ data class CyclicLocation(val world: CyclicWorld, val x: Double, val y: Double, 
             return copy(x = x - offsetX, z = z - offsetZ)
         }
 
-    operator fun minus(other: CyclicLocation): LocationOffset? {
+    fun moveTo(other: CyclicLocation): Movement? {
         val shortRange = Short.MIN_VALUE..Short.MAX_VALUE
-        val deltaX = (x * 4096).roundToLong() - (other.x * 4096).roundToLong()
+        val deltaX = (other.x * 4096).roundToLong() - (x * 4096).roundToLong()
         val deltaXShort = if (deltaX in shortRange)
             deltaX.toShort()
         else
             return null
-        val deltaY = (y * 4096).roundToLong() - (other.y * 4096).roundToLong()
+        val deltaY = (other.y * 4096).roundToLong() - (y * 4096).roundToLong()
         val deltaYShort = if (deltaY in shortRange)
             deltaY.toShort()
         else
             return null
-        val deltaZ = (z * 4096).roundToLong() - (other.z * 4096).roundToLong()
+        val deltaZ = (other.z * 4096).roundToLong() - (z * 4096).roundToLong()
         val deltaZShort = if (deltaZ in shortRange)
             deltaZ.toShort()
         else
             return null
-        return LocationOffset(deltaXShort, deltaYShort, deltaZShort)
+        return Movement(deltaXShort, deltaYShort, deltaZShort)
     }
 
-    fun setWorld(world: CyclicWorld) = copy(world = world)
+    operator fun plus(worldOffset: WorldOffset): CyclicLocation {
+        val config = world.config
+        val newX = x + worldOffset.deltaX * config.maxX
+        val newZ = z + worldOffset.deltaZ * config.maxZ
+        return copy(x = newX, z = newZ)
+    }
 
     fun toBukkitLocation(world: World) = Location(world, x, y, z, yaw, pitch)
 
     private companion object {
-        fun angleFloatToByte(angle: Float) = round(angle * 256.0 / 360.0).toByte()
+        fun angleFloatToByte(angle: Float): Byte {
+            return round(angle * 256.0 / 360.0).toByte()
+        }
     }
 }

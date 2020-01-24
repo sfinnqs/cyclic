@@ -31,7 +31,8 @@
 package org.sfinnqs.cyclic
 
 import net.jcip.annotations.Immutable
+import org.sfinnqs.cyclic.world.WorldOffset
 import java.util.*
 
 @Immutable
-data class FakeEntity(val entity: UUID, val offsetX: Int, val offsetZ: Int)
+data class FakeEntity(val entity: UUID, val offset: WorldOffset)
