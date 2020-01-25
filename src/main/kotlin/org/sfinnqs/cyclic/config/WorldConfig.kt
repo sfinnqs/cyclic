@@ -30,16 +30,19 @@
  */
 package org.sfinnqs.cyclic.config
 
-import kotlinx.collections.immutable.toImmutableMap
+import kotlinx.collections.immutable.persistentMapOf
 import net.jcip.annotations.Immutable
 import org.bukkit.configuration.ConfigurationSection
 import org.bukkit.configuration.InvalidConfigurationException
-import java.util.*
+import org.sfinnqs.cyclic.logger
 
 @Immutable
 data class WorldConfig(val maxX: Int, val maxZ: Int) {
 
-    constructor(config: ConfigurationSection) : this(config.maxX, config.maxZ)
+    constructor(config: ConfigurationSection, default: WorldConfig) : this(
+        getMaxX(config, default),
+        getMaxZ(config, default)
+    )
 
     init {
         if (maxX <= 0 || !maxX.isDivisibleBy16)
@@ -51,23 +54,62 @@ data class WorldConfig(val maxX: Int, val maxZ: Int) {
     val xChunks = maxX / 16
     val zChunks = maxZ / 16
 
-    fun toMap(world: UUID? = null): Map<String, Any> {
-        val result = mutableMapOf<String, Any>("max x" to maxX, "max z" to maxZ)
-        if (world != null)
-            result["id"] = world.toString()
-        return result.toImmutableMap()
-    }
+    fun toMap(): Map<String, Any> =
+        persistentMapOf("max x" to maxX, "max z" to maxZ)
 
     private companion object {
 
-        val ConfigurationSection.maxX
-            get() = this.getInt("max x", 48)
+        fun getMaxX(config: ConfigurationSection, default: WorldConfig): Int {
+            val defaultX = default.maxX
+            val result = config.getInt("max x", defaultX)
+            if (result <= 0) {
+                logger.warning {
+                    "max x must be positive but was $result; changing to $defaultX"
+                }
+                return defaultX
+            }
+            if (!result.isDivisibleBy16) {
+                val rounded = result.roundTo16()
+                logger.warning {
+                    "max x must be a multiple of 16 but was $result; changing to $rounded"
+                }
+                return rounded
+            }
+            return result
+        }
 
-        val ConfigurationSection.maxZ
-            get() = this.getInt("max z", 48)
+        fun getMaxZ(config: ConfigurationSection, default: WorldConfig): Int {
+            val defaultZ = default.maxZ
+            val result = config.getInt("max z", defaultZ)
+            if (result <= 0) {
+                logger.warning {
+                    "max z must be positive but was $result; changing to $defaultZ"
+                }
+                return defaultZ
+            }
+            if (!result.isDivisibleBy16) {
+                val rounded = result.roundTo16()
+                logger.warning {
+                    "max z must be a multiple of 16 but was $result; changing to $rounded"
+                }
+                return rounded
+            }
+            return result
+        }
 
         val Int.isDivisibleBy16
             get() = this and 0xf == 0
+
+        fun Int.roundTo16(): Int {
+            assert(this > 0)
+            val roundDown = this / 16 * 16
+            val roundUp = (this + 15) / 16 * 16
+            val thisDouble = this.toDouble()
+            return if (roundUp / thisDouble < thisDouble / roundDown)
+                roundUp
+            else
+                roundDown
+        }
 
     }
 

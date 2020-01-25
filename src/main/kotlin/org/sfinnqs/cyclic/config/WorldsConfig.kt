@@ -32,89 +32,35 @@ package org.sfinnqs.cyclic.config
 
 import kotlinx.collections.immutable.toImmutableMap
 import net.jcip.annotations.Immutable
-import org.bukkit.Server
-import org.bukkit.World
 import org.bukkit.configuration.ConfigurationSection
-import org.sfinnqs.cyclic.logger
-import java.util.*
 
 @Immutable
-class WorldsConfig(config: ConfigurationSection, server: Server) {
-    private val names: Map<UUID, String>
-    private val ids: Map<String, UUID>
-    private val idWorlds: Map<UUID, WorldConfig>
-    private val nameWorlds: Map<String, WorldConfig>
-    private val default = config.getConfigurationSection("default")?.let {
-        WorldConfig(it)
-    } ?: defaultWorldConfig
+class WorldsConfig(config: ConfigurationSection) {
+    private val worlds: Map<String, WorldConfig>
+    private val default: WorldConfig
 
     init {
-        val tempNames = mutableMapOf<UUID, String>()
-        val tempIds = mutableMapOf<String, UUID>()
-        for (world in server.worlds) {
-            val id = world.uid
-            val name = world.name
-            tempNames[id] = name
-            tempIds[name] = id
-        }
-        val tempIdWorlds = mutableMapOf<UUID, WorldConfig>()
-        val tempNameWorlds = mutableMapOf<String, WorldConfig>()
+        val defaultSection = config.getConfigurationSection("default")
+        default = if (defaultSection == null)
+            defaultWorldConfig
+        else
+            WorldConfig(defaultSection, defaultWorldConfig)
+
+        val tempWorlds = mutableMapOf<String, WorldConfig>()
         for (name in config.getKeys(false)) {
             if (name == "default") continue
-            if (!config.isConfigurationSection(name)) continue
-            val section = config.getConfigurationSection(name)!!
-            val idString = section.getString("id")
-            val id = if (idString == null)
-                tempIds[name]
-            else
-                try {
-                    UUID.fromString(idString)
-                } catch (e: IllegalArgumentException) {
-                    logger.warning {
-                        "Unrecognized UUID \"$idString\" in config"
-                    }
-                    null
-                }
-            val worldConfig = WorldConfig(section)
-            tempNameWorlds[name] = worldConfig
-            if (id != null) {
-                tempIdWorlds.putIfAbsent(id, worldConfig)
-                tempNames.putIfAbsent(id, name)
-            }
+            val section = config.getConfigurationSection(name) ?: continue
+            tempWorlds[name] = WorldConfig(section, default)
         }
-        names = tempNames.toImmutableMap()
-        ids = tempIds.toImmutableMap()
-        idWorlds = tempIdWorlds.toImmutableMap()
-        nameWorlds = tempNameWorlds.toImmutableMap()
+        worlds = tempWorlds.toImmutableMap()
     }
 
-    operator fun get(world: UUID) = idWorlds[world]
-        ?: nameWorlds[names[world]]
-        ?: default
+    operator fun get(name: String) = worlds[name] ?: default
 
-    operator fun get(name: String) = nameWorlds[name]
-        ?: idWorlds[ids[name]]
-        ?: default
-
-    operator fun get(world: World): WorldConfig {
-        val id = world.uid
-        val name = world.name
-        assert(names[id] == name)
-        assert(ids[name] == id)
-        return idWorlds[id] ?: nameWorlds[name] ?: default
-    }
-
-    fun toMap(): Map<String, Map<String, Any>> {
+    fun toMap(): Map<String, Any> {
         val result = mutableMapOf<String, Map<String, Any>>()
-        for ((id, config) in idWorlds) {
-            result[names.getValue(id)] = config.toMap(id)
-        }
-        for ((name, config) in nameWorlds) {
-            if (name in result) continue
-            result.computeIfAbsent(name) {
-                config.toMap(ids[name])
-            }
-        }
+        for ((name, config) in worlds)
+            result[name] = config.toMap()
         result["default"] = default.toMap()
         return result.toImmutableMap()
     }

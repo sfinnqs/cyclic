@@ -1,11 +1,7 @@
 worlds:
-  world:
+  world_custom:
     max x: 32
     max z: 48
-    generator:
-      biome: plains
   default:
     max x: 48
     max z: 48
-    generator:
-      biome: plains

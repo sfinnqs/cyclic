@@ -49,7 +49,7 @@ class Cyclic : JavaPlugin() {
         org.sfinnqs.cyclic.logger = logger
         saveDefaultConfig()
         reloadConfig()
-        cyclicConfig = CyclicConfig(config, server)
+        cyclicConfig = CyclicConfig(config)
         config.setAll(cyclicConfig.toMap())
         saveConfig()
     }
