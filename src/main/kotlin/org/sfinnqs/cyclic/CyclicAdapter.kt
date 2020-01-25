@@ -56,8 +56,7 @@ class CyclicAdapter(private val cyclic: Cyclic) : PacketAdapter(
     PLAYER_INFO
 ) {
 
-    private val customPackets =
-        WeakSet<Any>()
+    private val customPackets = WeakSet<Any>()
     private val lock = ReentrantReadWriteLock()
     private val knownIds = WeakMap<Player, MutableSet<UUID>>()
     private val spawnQueue =
@@ -81,9 +80,8 @@ class CyclicAdapter(private val cyclic: Cyclic) : PacketAdapter(
                 cyclic.manager.unloadChunk(player, ChunkCoords(x, z))
             }
             NAMED_ENTITY_SPAWN -> {
-                if (cyclic.manager.getViewerWorld(player) == null) return
                 val uuid = packet.uuiDs.read(0)
-                if (uuid in lock.read { knownIds[player] }.orEmpty()) return
+                if (lock.read { uuid in knownIds[player].orEmpty() }) return
                 lock.write {
                     if (uuid in knownIds[player].orEmpty()) return
                     spawnQueue.getOrPut(player, ::mutableMapOf)

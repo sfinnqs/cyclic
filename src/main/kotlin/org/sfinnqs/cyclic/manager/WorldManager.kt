@@ -39,7 +39,6 @@ import com.google.common.collect.SetMultimap
 import net.jcip.annotations.ThreadSafe
 import org.bukkit.entity.Player
 import org.sfinnqs.cyclic.FakeEntity
-import org.sfinnqs.cyclic.collect.WeakMap
 import org.sfinnqs.cyclic.world.ChunkCoords
 import org.sfinnqs.cyclic.world.CyclicChunk
 import org.sfinnqs.cyclic.world.CyclicLocation
@@ -52,28 +51,17 @@ import kotlin.concurrent.write
 @ThreadSafe
 class WorldManager {
     private val lock = ReentrantReadWriteLock()
-    private val viewerIds = WeakMap<Player, UUID>()
+    private val viewerEntities = ViewerEntities()
     private val locations = LocationManager()
     private val fakeIds = FakeIds()
     private val visibility = Visibility()
     private val fakeMap: SetMultimap<UUID, FakeEntity> = HashMultimap.create()
     private val loadedChunks = ChunkManager()
 
-    // the only method in this class that calls Player.getUniqueId()
-    fun addPlayer(player: Player, id: UUID): Boolean {
-        val readPrev = lock.read { viewerIds[player] }
-        if (readPrev == id) return false
-        if (readPrev != null)
-            throw IllegalArgumentException("player already has id $readPrev")
-        lock.write {
-            val writePrev1 = viewerIds[player]
-            if (writePrev1 == id) return false
-            if (writePrev1 != null)
-                throw IllegalArgumentException("player already has id $writePrev1")
-            val writePrev2 = viewerIds.put(player, id)
-            assert(writePrev2 == null)
-            return true
-        }
+    fun addPlayerId(player: Player, id: UUID): Boolean {
+        val prev = lock.read { viewerEntities[player] }
+        if (prev == id) return false
+        return lock.write { viewerEntities.add(player, id) }
     }
 
     fun loadChunk(viewer: Player, coords: ChunkCoords) {
@@ -107,28 +95,30 @@ class WorldManager {
 
     fun unloadChunk(viewer: Player, coords: ChunkCoords) {
         lock.read {
-            val world = getViewerWorld(viewer)!!
+            val world = getViewerWorld(viewer) ?: return
             val chunk = CyclicChunk(world, coords)
             if (!loadedChunks.contains(viewer, chunk)) return
         }
-        val packets = lock.write {
-            val world = getViewerWorld(viewer)!!
+        val packet = lock.write {
+            val world = getViewerWorld(viewer) ?: return
             val chunk = CyclicChunk(world, coords)
-            unloadPackets(viewer, chunk)
-        }
-        val protocol = ProtocolLibrary.getProtocolManager()
-        for (packet in packets)
-            protocol.sendServerPacket(packet.viewer, packet.packet)
-    }
 
-    fun unloadAllChunks(viewer: Player) {
-        // TODO a cleaner solution
-        val packets = lock.write {
-            getLoadedChunks(viewer).flatMap { unloadPackets(viewer, it) }
+            val removed = loadedChunks.remove(viewer, chunk)
+            if (!removed) return
+            val fakesToDespawn = mutableSetOf<FakeEntity>()
+            for ((entity, location) in locations[chunk.representative]) {
+                val entityChunk = location.chunk
+                if (entityChunk == chunk) continue
+                fakesToDespawn.add(FakeEntity(entity, chunk - entityChunk))
+            }
+            if (fakesToDespawn.isEmpty()) return
+            despawnFakes(fakesToDespawn, viewer)
+
         }
-        val protocol = ProtocolLibrary.getProtocolManager()
-        for (packet in packets)
+        if (packet != null) {
+            val protocol = ProtocolLibrary.getProtocolManager()
             protocol.sendServerPacket(packet.viewer, packet.packet)
+        }
     }
 
     fun getLoadedChunks(viewer: Player, chunk: RepresentativeChunk? = null) =
@@ -136,8 +126,10 @@ class WorldManager {
 
     fun setLocation(entity: UUID, location: CyclicLocation?): CyclicLocation? {
         lock.read {
-            locations[entity]
-        }?.takeIf { it == location }?.let { return it }
+            val oldLocation = locations[entity]
+            if (oldLocation == location)
+                return oldLocation
+        }
 
         val packets = mutableListOf<PacketToSend>()
         val oldLoc = lock.write {
@@ -157,10 +149,18 @@ class WorldManager {
                         )
                     )
                 }
-                // TODO despawn multiple fakes in one packet
-                for (fake in fakes)
-                    packets.add(PacketToSend(viewer, despawnFake(fake, viewer)))
+                despawnFakes(fakes, viewer)?.let { packets.add(it) }
             }
+
+            if (location == null) {
+                val viewer = viewerEntities[entity]
+                if (viewer != null) {
+                    val removed = loadedChunks.remove(viewer)
+                    if (removed)
+                        despawnAllFakes(viewer)
+                }
+            }
+
             oldLoc
         }
         val protocol = ProtocolLibrary.getProtocolManager()
@@ -197,24 +197,8 @@ class WorldManager {
     }
 
     fun getViewerWorld(viewer: Player) = lock.read {
-        viewerIds[viewer]?.let { locations[it] }
+        viewerEntities[viewer]?.let { locations[it] }
     }?.world
-
-    private fun unloadPackets(
-        viewer: Player,
-        chunk: CyclicChunk
-    ): List<PacketToSend> {
-        val result = mutableListOf<PacketToSend>()
-        val removed = loadedChunks.remove(viewer, chunk)
-        if (!removed) return emptyList()
-        for ((entity, location) in locations[chunk.representative]) {
-            val entityChunk = location.chunk
-            if (entityChunk == chunk) continue
-            val fake = FakeEntity(entity, chunk - entityChunk)
-            result.add(PacketToSend(viewer, despawnFake(fake, viewer)))
-        }
-        return result
-    }
 
     private fun spawnFake(
         fake: FakeEntity,
@@ -319,21 +303,36 @@ class WorldManager {
         return result
     }
 
-    private fun despawnFake(fake: FakeEntity, viewer: Player): PacketContainer {
+    private fun despawnFakes(
+        fakes: Set<FakeEntity>,
+        viewer: Player
+    ): PacketToSend? {
         val protocol = ProtocolLibrary.getProtocolManager()
         val packet = protocol.createPacket(ENTITY_DESTROY)
-        val entityId = fakeIds[fake]!!
-        packet.integerArrays?.write(0, intArrayOf(entityId))
-        val wasSeen = visibility.remove(viewer, fake)
-        assert(wasSeen)
-        val entity = fake.entity
-        if (visibility[fake].isEmpty()) {
-            val removedId = fakeIds.remove(fake)
-            assert(removedId)
-            val wasInMap = fakeMap.remove(entity, fake)
-            assert(wasInMap)
+        val entityIds = fakes.map { fakeIds[it]!! }.toIntArray()
+        if (entityIds.isEmpty()) return null
+        packet.integerArrays?.write(0, entityIds)
+        for (fake in fakes) {
+            val wasSeen = visibility.remove(viewer, fake)
+            assert(wasSeen)
+            if (visibility[fake].isEmpty()) {
+                val removedId = fakeIds.remove(fake)
+                assert(removedId != null)
+                val wasInMap = fakeMap.remove(fake.entity, fake)
+                assert(wasInMap)
+            }
         }
-        return packet
+        return PacketToSend(viewer, packet)
+    }
+
+    private fun despawnAllFakes(viewer: Player) {
+        for (fake in visibility.remove(viewer))
+            if (visibility[fake].isEmpty()) {
+                val removedId = fakeIds.remove(fake)
+                assert(removedId != null)
+                val wasInMap = fakeMap.remove(fake.entity, fake)
+                assert(wasInMap)
+            }
     }
 
     private data class PacketToSend(

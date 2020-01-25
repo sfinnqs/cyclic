@@ -62,7 +62,7 @@ class CyclicListener(private val plugin: Cyclic) : Listener {
     @EventHandler(priority = MONITOR)
     fun onPlayerLogin(event: PlayerLoginEvent) {
         val player = event.player
-        plugin.manager.addPlayer(player, player.uniqueId)
+        plugin.manager.addPlayerId(player, player.uniqueId)
     }
 
     @EventHandler(priority = LOWEST)
@@ -144,8 +144,6 @@ class CyclicListener(private val plugin: Cyclic) : Listener {
         val world = player.world
         val cyclicWorld = world.cyclicWorld ?: return
         player.teleport(getRepresentativeLocation(cyclicWorld, player))
-        // TODO remove this call after fixing WorldManager
-        plugin.manager.unloadAllChunks(player)
         plugin.manager.setLocation(player.uniqueId, null)
     }
 

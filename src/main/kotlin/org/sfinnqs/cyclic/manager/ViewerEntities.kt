@@ -30,39 +30,34 @@
  */
 package org.sfinnqs.cyclic.manager
 
+import com.google.common.collect.MapMaker
 import net.jcip.annotations.NotThreadSafe
-import org.sfinnqs.cyclic.FakeEntity
+import org.bukkit.entity.Player
+import org.sfinnqs.cyclic.collect.WeakMap
+import java.util.*
 
 @NotThreadSafe
-class FakeIds {
-    private val entityList = mutableListOf<FakeEntity?>()
-    private val entityIds = mutableMapOf<FakeEntity, Int>()
+class ViewerEntities {
+    private val viewerEntities = WeakMap<Player, UUID>()
+    private val entityViewers: MutableMap<UUID, Player> =
+        MapMaker().weakValues().makeMap()
 
-    operator fun get(fake: FakeEntity) = entityIds[fake]
+    operator fun get(viewer: Player) = viewerEntities[viewer]
+    operator fun get(entity: UUID) = entityViewers[entity]
 
-    fun getOrCreate(fake: FakeEntity): Int {
-        val existingId = entityIds[fake]
-        if (existingId != null) return existingId
-        for (i in 0..entityList.size) {
-            val storedDuplicate = entityList.getOrNull(i)
-            if (storedDuplicate == null) {
-                if (i == entityList.size)
-                    entityList.add(fake)
-                else
-                    entityList[i] = fake
-                val entityId = Int.MAX_VALUE - i
-                entityIds[fake] = entityId
-                return entityId
-            }
-        }
-        // TODO more elegant way?
-        throw AssertionError()
-    }
-
-    fun remove(fake: FakeEntity): Int? {
-        val eid = entityIds.remove(fake) ?: return null
-        val formerFake = entityList.set(Int.MAX_VALUE - eid, null)
-        assert(formerFake == fake)
-        return eid
+    fun add(viewer: Player, entity: UUID): Boolean {
+        val prevEntity = viewerEntities[viewer]
+        if (prevEntity == entity) return false
+        if (prevEntity != null)
+            throw IllegalArgumentException("viewer already has id $prevEntity")
+        val prevViewer = entityViewers[entity]
+        assert(prevViewer != viewer)
+        if (prevViewer != null)
+            throw IllegalArgumentException("id already assigned to viewer $prevViewer")
+        val prevEntity2 = viewerEntities.put(viewer, entity)
+        assert(prevEntity2 == null)
+        val prevViewer2 = entityViewers.put(entity, viewer)
+        assert(prevViewer2 == null)
+        return true
     }
 }

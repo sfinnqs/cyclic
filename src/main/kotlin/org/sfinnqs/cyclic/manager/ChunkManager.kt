@@ -64,6 +64,12 @@ class ChunkManager {
     fun contains(viewer: Player, chunk: CyclicChunk) =
         all[viewer]?.contains(chunk) ?: false
 
+    fun contains(viewer: Player): Boolean {
+        val result = all[viewer] != null
+        assert(result == (reps[viewer] != null))
+        return result
+    }
+
     fun add(viewer: Player, chunk: CyclicChunk): Boolean {
         val addedToAll = all.computeIfAbsent(viewer) {
             mutableSetOf()
@@ -75,7 +81,13 @@ class ChunkManager {
         return addedToAll
     }
 
-    fun remove(viewer: Player, chunk: CyclicChunk): Boolean {
+    fun remove(viewer: Player, chunk: CyclicChunk? = null): Boolean {
+        if (chunk == null) {
+            val removedAll = all.remove(viewer) != null
+            val removedReps = reps.remove(viewer) != null
+            assert(removedAll == removedReps)
+            return removedAll
+        }
         val seenGroups = reps[viewer]
         if (seenGroups == null) {
             assert(all[viewer]?.contains(chunk) != true)

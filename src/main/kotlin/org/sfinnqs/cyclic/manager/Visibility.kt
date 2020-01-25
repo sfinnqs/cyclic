@@ -98,4 +98,14 @@ class Visibility {
             return false
         }
     }
+
+    fun remove(viewer: Player): Set<FakeEntity> {
+        val seenByIterator = seenBy.values.iterator()
+        while (seenByIterator.hasNext()) {
+            val viewers = seenByIterator.next()
+            if (viewers.remove(viewer) && viewers.isEmpty())
+                seenByIterator.remove()
+        }
+        return canSee.remove(viewer)?.values().orEmpty().toImmutableSet()
+    }
 }
