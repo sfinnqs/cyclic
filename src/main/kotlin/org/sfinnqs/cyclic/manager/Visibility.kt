@@ -35,9 +35,9 @@ import com.google.common.collect.SetMultimap
 import kotlinx.collections.immutable.toImmutableSet
 import net.jcip.annotations.NotThreadSafe
 import org.bukkit.entity.Player
-import org.sfinnqs.cyclic.FakeEntity
 import org.sfinnqs.cyclic.collect.WeakMap
 import org.sfinnqs.cyclic.collect.WeakSet
+import org.sfinnqs.cyclic.world.FakeEntity
 import java.util.*
 
 @NotThreadSafe

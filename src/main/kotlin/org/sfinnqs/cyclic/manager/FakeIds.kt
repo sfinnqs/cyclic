@@ -31,7 +31,7 @@
 package org.sfinnqs.cyclic.manager
 
 import net.jcip.annotations.NotThreadSafe
-import org.sfinnqs.cyclic.FakeEntity
+import org.sfinnqs.cyclic.world.FakeEntity
 
 @NotThreadSafe
 class FakeIds {

@@ -28,10 +28,9 @@
  * but you may omit source code from the "Minecraft: Java Edition" server from
  * the available Corresponding Source.
  */
-package org.sfinnqs.cyclic
+package org.sfinnqs.cyclic.world
 
 import net.jcip.annotations.Immutable
-import org.sfinnqs.cyclic.world.WorldOffset
 import java.util.*
 
 @Immutable

@@ -38,11 +38,7 @@ import com.google.common.collect.HashMultimap
 import com.google.common.collect.SetMultimap
 import net.jcip.annotations.ThreadSafe
 import org.bukkit.entity.Player
-import org.sfinnqs.cyclic.FakeEntity
-import org.sfinnqs.cyclic.world.ChunkCoords
-import org.sfinnqs.cyclic.world.CyclicChunk
-import org.sfinnqs.cyclic.world.CyclicLocation
-import org.sfinnqs.cyclic.world.RepresentativeChunk
+import org.sfinnqs.cyclic.world.*
 import java.util.*
 import java.util.concurrent.locks.ReentrantReadWriteLock
 import kotlin.concurrent.read
@@ -76,11 +72,11 @@ class WorldManager {
             val world = getViewerWorld(viewer) ?: return
             val chunk = CyclicChunk(world, coords)
             loadedChunks.add(viewer, chunk)
-            for ((uuid, location) in locations[chunk.representative]) {
+            for ((entity, location) in locations[chunk.representative]) {
                 val playerChunk = location.chunk
                 if (playerChunk == chunk) continue
                 val offset = chunk - playerChunk
-                val fake = FakeEntity(uuid, offset)
+                val fake = FakeEntity(entity, offset)
                 val newLocation = location + offset
                 val newPackets = spawnFake(fake, viewer, newLocation).map {
                     PacketToSend(viewer, it)
