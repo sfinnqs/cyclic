@@ -47,14 +47,15 @@ class Cyclic : JavaPlugin() {
 
     override fun onLoad() {
         org.sfinnqs.cyclic.logger = logger
+    }
+
+    override fun onEnable() {
         saveDefaultConfig()
         reloadConfig()
         cyclicConfig = CyclicConfig(config)
         config.setAll(cyclicConfig.toMap())
         saveConfig()
-    }
-
-    override fun onEnable() {
+        
         server.pluginManager.registerEvents(CyclicListener(this), this)
         val protocol = ProtocolLibrary.getProtocolManager()
         protocol.addPacketListener(CyclicAdapter(this))
