@@ -4,7 +4,7 @@
   xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
   <modelVersion>4.0.0</modelVersion>
 
-  <groupId>com.voichick.cyclic</groupId>
+  <groupId>org.sfinnqs.cyclic</groupId>
   <artifactId>cyclic</artifactId>
   <version>0.1</version>
   <packaging>jar</packaging>
@@ -102,6 +102,11 @@
       <groupId>org.jetbrains.kotlin</groupId>
       <artifactId>kotlin-stdlib-jdk8</artifactId>
       <version>${kotlin.version}</version>
+    </dependency>
+    <dependency>
+      <groupId>org.sfinnqs.source</groupId>
+      <artifactId>source-api</artifactId>
+      <version>1.0</version>
     </dependency>
     <dependency>
       <groupId>com.comphenix.protocol</groupId>

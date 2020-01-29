@@ -37,13 +37,16 @@ import org.bukkit.plugin.java.JavaPlugin
 import org.sfinnqs.cyclic.config.CyclicConfig
 import org.sfinnqs.cyclic.gen.CyclicGenerator
 import org.sfinnqs.cyclic.manager.WorldManager
+import org.sfinnqs.source.OpenSource
 
 @NotThreadSafe
-class Cyclic : JavaPlugin() {
+class Cyclic : JavaPlugin(), OpenSource {
 
     lateinit var cyclicConfig: CyclicConfig
         private set
     val manager = WorldManager()
+
+    override fun getSource() = "https://gitlab.com/sfinnqs/cyclic"
 
     override fun onLoad() {
         org.sfinnqs.cyclic.logger = logger
@@ -55,7 +58,7 @@ class Cyclic : JavaPlugin() {
         cyclicConfig = CyclicConfig(config)
         config.setAll(cyclicConfig.toMap())
         saveConfig()
-        
+
         server.pluginManager.registerEvents(CyclicListener(this), this)
         val protocol = ProtocolLibrary.getProtocolManager()
         protocol.addPacketListener(CyclicAdapter(this))
