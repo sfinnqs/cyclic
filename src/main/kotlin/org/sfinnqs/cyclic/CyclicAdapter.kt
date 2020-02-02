@@ -35,6 +35,7 @@ import com.comphenix.protocol.ProtocolLibrary
 import com.comphenix.protocol.events.PacketAdapter
 import com.comphenix.protocol.events.PacketContainer
 import com.comphenix.protocol.events.PacketEvent
+import com.comphenix.protocol.reflect.StructureModifier
 import com.comphenix.protocol.wrappers.EnumWrappers.PlayerInfoAction.ADD_PLAYER
 import com.comphenix.protocol.wrappers.EnumWrappers.PlayerInfoAction.REMOVE_PLAYER
 import net.jcip.annotations.ThreadSafe
@@ -46,16 +47,21 @@ import java.util.*
 import java.util.concurrent.locks.ReentrantReadWriteLock
 import kotlin.concurrent.read
 import kotlin.concurrent.write
+import org.sfinnqs.cyclic.TeleportFlag.X
+import org.sfinnqs.cyclic.TeleportFlag.Z
+import org.sfinnqs.cyclic.world.CyclicChunk
+import org.sfinnqs.cyclic.world.CyclicLocation
 
 @ThreadSafe
-class CyclicAdapter(private val cyclic: Cyclic) : PacketAdapter(
+class CyclicAdapter(cyclic: Cyclic) : PacketAdapter(
     cyclic,
     MAP_CHUNK,
     UNLOAD_CHUNK,
     NAMED_ENTITY_SPAWN,
-    PLAYER_INFO
+    PLAYER_INFO,
+    POSITION
 ) {
-
+    private val manager = cyclic.manager
     private val customPackets = WeakSet<Any>()
     private val lock = ReentrantReadWriteLock()
     private val knownIds = WeakMap<Player, MutableSet<UUID>>()
@@ -69,29 +75,37 @@ class CyclicAdapter(private val cyclic: Cyclic) : PacketAdapter(
         when (event.packetType) {
             MAP_CHUNK -> {
                 val ints = packet.integers
-                val x = ints.read(0)
-                val z = ints.read(1)
-                cyclic.manager.loadChunk(player, ChunkCoords(x, z))
+                val coords = ChunkCoords(ints.read(0), ints.read(1))
+                val (world, offset) = manager.loadChunk(player, coords)
+                    ?: return
+                val clientCoords = (CyclicChunk(world, coords) + offset).coords
+                ints.write(0, clientCoords.x)
+                ints.write(1, clientCoords.z)
             }
             UNLOAD_CHUNK -> {
+                // TODO merge with MAP_CHUNK somehow
                 val ints = packet.integers
-                val x = ints.read(0)
-                val z = ints.read(1)
-                cyclic.manager.unloadChunk(player, ChunkCoords(x, z))
+                val coords = ChunkCoords(ints.read(0), ints.read(1))
+                val (world, offset) = manager.unloadChunk(player, coords)
+                    ?: return
+                val clientCoords = (CyclicChunk(world, coords) + offset).coords
+                ints.write(0, clientCoords.x)
+                ints.write(1, clientCoords.z)
             }
             NAMED_ENTITY_SPAWN -> {
-                val uuid = packet.uuiDs.read(0)
-                if (lock.read { uuid in knownIds[player].orEmpty() }) return
+                val id = packet.uuiDs.read(0)
+                offsetDoubles(player, packet.doubles)
+                if (lock.read { id in knownIds[player].orEmpty() }) return
                 lock.write {
-                    if (uuid in knownIds[player].orEmpty()) return
+                    if (id in knownIds[player].orEmpty()) return
                     spawnQueue.getOrPut(player, ::mutableMapOf)
-                        .getOrPut(uuid, ::LinkedList)
+                        .getOrPut(id, ::LinkedList)
                         .add(packet)
                     event.isCancelled = true
                 }
             }
             PLAYER_INFO -> {
-                val uuids = packet.playerInfoDataLists.read(0).map {
+                val ids = packet.playerInfoDataLists.read(0).map {
                     it.profile.uuid
                 }
                 when (packet.playerInfoAction.read(0)) {
@@ -99,10 +113,10 @@ class CyclicAdapter(private val cyclic: Cyclic) : PacketAdapter(
                         val packets = mutableListOf<PacketContainer>()
                         lock.write {
                             knownIds.getOrPut(player, ::mutableSetOf)
-                                .addAll(uuids)
+                                .addAll(ids)
                             val queues = spawnQueue[player] ?: return
-                            for (uuid in uuids) {
-                                val queue = queues.remove(uuid) ?: continue
+                            for (id in ids) {
+                                val queue = queues.remove(id) ?: continue
                                 packets.addAll(queue)
                                 if (queues.isEmpty())
                                     spawnQueue.remove(player)
@@ -117,12 +131,42 @@ class CyclicAdapter(private val cyclic: Cyclic) : PacketAdapter(
                             protocol.sendServerPacket(player, toSend)
                     }
                     REMOVE_PLAYER -> lock.write {
-                        knownIds[player]?.removeAll(uuids)
+                        knownIds[player]?.removeAll(ids)
                     }
                     else -> return
                 }
             }
+            POSITION -> {
+                val (world, offset) = manager.getWorldAndOffset(player)
+                    ?: return
+                val doubles = packet.doubles
+                // can't use offsetDoubles because they might be relative
+                val x = doubles.read(0)
+                val z = doubles.read(2)
+                // y, yaw, pitch, and grounded are ignored
+                val location =
+                    CyclicLocation(world, x, 0.0, z, 0.0F, 0.0F, false)
+                val clientLocation = location + offset
+                val flags = packet.getSets(TeleportFlag.Converter)!!.read(0)!!
+                // absolute x
+                if (X !in flags) doubles.write(0, clientLocation.x)
+                // absolute z
+                if (Z !in flags) doubles.write(2, clientLocation.z)
+            }
         }
+    }
 
+    private fun offsetDoubles(
+        player: Player,
+        doubles: StructureModifier<Double>
+    ) {
+        val (world, offset) = manager.getWorldAndOffset(player) ?: return
+        val x = doubles.read(0)
+        val z = doubles.read(2)
+        // y, yaw, pitch, and grounded are ignored
+        val location = CyclicLocation(world, x, 0.0, z, 0.0F, 0.0F, false)
+        val clientLocation = location + offset
+        doubles.write(0, clientLocation.x)
+        doubles.write(2, clientLocation.z)
     }
 }

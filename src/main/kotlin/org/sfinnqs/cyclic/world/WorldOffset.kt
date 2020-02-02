@@ -33,4 +33,9 @@ package org.sfinnqs.cyclic.world
 import net.jcip.annotations.Immutable
 
 @Immutable
-data class WorldOffset(val deltaX: Int, val deltaZ: Int)
+data class WorldOffset(val deltaX: Int, val deltaZ: Int) {
+    operator fun unaryMinus() = WorldOffset(-deltaX, -deltaZ)
+    companion object {
+        val ZERO = WorldOffset(0, 0)
+    }
+}

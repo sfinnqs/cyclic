@@ -37,8 +37,12 @@ import com.comphenix.protocol.wrappers.WrappedDataWatcher
 import com.google.common.collect.HashMultimap
 import com.google.common.collect.SetMultimap
 import net.jcip.annotations.ThreadSafe
+import org.bukkit.Bukkit
+import org.bukkit.World
 import org.bukkit.entity.Player
+import org.bukkit.event.player.PlayerTeleportEvent.TeleportCause.PLUGIN
 import org.sfinnqs.cyclic.world.*
+import org.sfinnqs.cyclic.world.WorldOffset.Companion.ZERO
 import java.util.*
 import java.util.concurrent.locks.ReentrantReadWriteLock
 import kotlin.concurrent.read
@@ -49,10 +53,12 @@ class WorldManager {
     private val lock = ReentrantReadWriteLock()
     private val viewerEntities = ViewerEntities()
     private val locations = LocationManager()
+    // TODO merge fakeIds with fakeMap
     private val fakeIds = FakeIds()
     private val visibility = Visibility()
     private val fakeMap: SetMultimap<UUID, FakeEntity> = HashMultimap.create()
     private val loadedChunks = ChunkManager()
+    private val viewerOffsets = mutableMapOf<Player, WorldOffset>()
 
     fun addPlayerId(player: Player, id: UUID): Boolean {
         val prev = lock.read { viewerEntities[player] }
@@ -60,16 +66,18 @@ class WorldManager {
         return lock.write { viewerEntities.add(player, id) }
     }
 
-    fun loadChunk(viewer: Player, coords: ChunkCoords) {
+    // TODO this method should take offset into account
+    fun loadChunk(viewer: Player, coords: ChunkCoords): WorldAndOffset? {
         // TODO remove lots of overlapping code with unloadChunk
         lock.read {
-            val world = getViewerWorld(viewer) ?: return
+            val world = getViewerWorld(viewer) ?: return null
             val chunk = CyclicChunk(world, coords)
-            if (loadedChunks.contains(viewer, chunk)) return
+            if (loadedChunks.contains(viewer, chunk))
+                return WorldAndOffset(world, getClientOffset(viewer))
         }
         val packets = mutableListOf<PacketToSend>()
-        lock.write {
-            val world = getViewerWorld(viewer) ?: return
+        val result = lock.write {
+            val world = getViewerWorld(viewer) ?: return null
             val chunk = CyclicChunk(world, coords)
             loadedChunks.add(viewer, chunk)
             for ((entity, location) in locations[chunk.representative]) {
@@ -83,38 +91,43 @@ class WorldManager {
                 }
                 packets.addAll(newPackets)
             }
+            WorldAndOffset(world, getClientOffset(viewer))
         }
         val protocol = ProtocolLibrary.getProtocolManager()
         for (packet in packets)
             protocol.sendServerPacket(packet.viewer, packet.packet)
+        return result
     }
 
-    fun unloadChunk(viewer: Player, coords: ChunkCoords) {
+    fun unloadChunk(viewer: Player, coords: ChunkCoords): WorldAndOffset? {
         lock.read {
-            val world = getViewerWorld(viewer) ?: return
+            val world = getViewerWorld(viewer) ?: return null
             val chunk = CyclicChunk(world, coords)
-            if (!loadedChunks.contains(viewer, chunk)) return
+            if (!loadedChunks.contains(viewer, chunk))
+                return WorldAndOffset(world, getClientOffset(viewer))
         }
-        val packet = lock.write {
-            val world = getViewerWorld(viewer) ?: return
+        val (packet, result) = lock.write {
+            val world = getViewerWorld(viewer) ?: return null
             val chunk = CyclicChunk(world, coords)
+            val result = WorldAndOffset(world, getClientOffset(viewer))
 
             val removed = loadedChunks.remove(viewer, chunk)
-            if (!removed) return
+            if (!removed) return result
             val fakesToDespawn = mutableSetOf<FakeEntity>()
             for ((entity, location) in locations[chunk.representative]) {
                 val entityChunk = location.chunk
                 if (entityChunk == chunk) continue
                 fakesToDespawn.add(FakeEntity(entity, chunk - entityChunk))
             }
-            if (fakesToDespawn.isEmpty()) return
-            despawnFakes(fakesToDespawn, viewer)
-
+            if (fakesToDespawn.isEmpty())
+                return result
+            despawnFakes(fakesToDespawn, viewer) to result
         }
         if (packet != null) {
             val protocol = ProtocolLibrary.getProtocolManager()
             protocol.sendServerPacket(packet.viewer, packet.packet)
         }
+        return result
     }
 
     fun getLoadedChunks(viewer: Player, chunk: RepresentativeChunk? = null) =
@@ -165,6 +178,29 @@ class WorldManager {
         return oldLoc
     }
 
+    fun getWorldAndOffset(player: Player): WorldAndOffset? = lock.read {
+        val world = getViewerWorld(player) ?: return null
+        WorldAndOffset(world, getClientOffset(player))
+    }
+
+    // TODO privatize and not lock
+    fun setOffsets(offsets: Map<Player, WorldOffset>, world: World) {
+        assert(Bukkit.isPrimaryThread())
+        val tps = mutableMapOf<Player, CyclicLocation>()
+        lock.write {
+            for ((viewer, offset) in offsets) {
+                val oldOffset = viewerOffsets.put(viewer, offset) ?: ZERO
+                if (oldOffset == offset) continue
+                // TODO ensure all viewers have locations
+                val oldLocation = locations[viewerEntities[viewer]!!]!!
+                val newLocation = oldLocation - offset
+                tps[viewer] = newLocation
+            }
+        }
+        for ((viewer, location) in tps)
+            viewer.teleport(location.toBukkitLocation(world), PLUGIN)
+    }
+
     private fun moveFakes(
         viewer: Player,
         entity: UUID,
@@ -195,6 +231,8 @@ class WorldManager {
     fun getViewerWorld(viewer: Player) = lock.read {
         viewerEntities[viewer]?.let { locations[it] }
     }?.world
+
+    private fun getClientOffset(player: Player) = viewerOffsets[player] ?: ZERO
 
     private fun spawnFake(
         fake: FakeEntity,

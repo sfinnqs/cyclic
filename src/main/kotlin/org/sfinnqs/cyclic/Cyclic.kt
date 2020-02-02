@@ -55,7 +55,9 @@ class Cyclic : JavaPlugin() {
         cyclicConfig = CyclicConfig(config)
         config.setAll(cyclicConfig.toMap())
         saveConfig()
-        
+
+        getCommand("cyclic")!!.setExecutor(CyclicExecutor(manager))
+
         server.pluginManager.registerEvents(CyclicListener(this), this)
         val protocol = ProtocolLibrary.getProtocolManager()
         protocol.addPacketListener(CyclicAdapter(this))

@@ -62,4 +62,13 @@ data class CyclicChunk(val world: CyclicWorld, val coords: ChunkCoords) {
         return WorldOffset(deltaX / xChunks, deltaZ / zChunks)
     }
 
+    operator fun plus(offset: WorldOffset): CyclicChunk {
+        val config = world.config
+        val newX = coords.x + offset.deltaX * config.xChunks
+        val newZ = coords.z + offset.deltaZ * config.zChunks
+        return copy(coords = ChunkCoords(newX, newZ))
+    }
+
+    operator fun minus(offset: WorldOffset) = this + -offset
+
 }

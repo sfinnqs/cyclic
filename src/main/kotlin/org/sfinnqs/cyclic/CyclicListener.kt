@@ -113,29 +113,22 @@ class CyclicListener(private val plugin: Cyclic) : Listener {
         player.teleport(getRepresentativeLocation(world, player))
     }
 
-    @EventHandler(priority = HIGHEST, ignoreCancelled = true)
+    @EventHandler(priority = MONITOR, ignoreCancelled = true)
     fun onPlayerMove(event: PlayerMoveEvent) {
+        val to = event.to ?: return
+        val world = to.world?.cyclicWorld ?: return
         val player = event.player
-        val world = player.world.cyclicWorld ?: return
-        val location = CyclicLocation(world, player)
+        val location = CyclicLocation(world, to, player.isOnGround)
         plugin.manager.setLocation(player.uniqueId, location)
     }
 
-    @EventHandler(priority = LOWEST, ignoreCancelled = true)
+    @EventHandler(priority = MONITOR, ignoreCancelled = true)
     fun onPlayerTeleport(event: PlayerTeleportEvent) {
-        val to = event.to
-        val world = to?.world
-        val cyclicWorld = world?.cyclicWorld
+        val to = event.to ?: return
+        val world = to.world?.cyclicWorld ?: return
         val player = event.player
-        val newTo = if (cyclicWorld == null) {
-            null
-        } else {
-            val cyclicTo = CyclicLocation(cyclicWorld, to, player.isOnGround)
-            val newTo = cyclicTo.representative
-            event.setTo(newTo.toBukkitLocation(world))
-            newTo
-        }
-        plugin.manager.setLocation(player.uniqueId, newTo)
+        val location = CyclicLocation(world, to, player.isOnGround)
+        plugin.manager.setLocation(player.uniqueId, location)
     }
 
     @EventHandler(priority = HIGHEST)

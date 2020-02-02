@@ -101,12 +101,14 @@ data class CyclicLocation(
         return Movement(deltaXShort, deltaYShort, deltaZShort)
     }
 
-    operator fun plus(worldOffset: WorldOffset): CyclicLocation {
+    operator fun plus(offset: WorldOffset): CyclicLocation {
         val config = world.config
-        val newX = x + worldOffset.deltaX * config.maxX
-        val newZ = z + worldOffset.deltaZ * config.maxZ
+        val newX = x + offset.deltaX * config.maxX
+        val newZ = z + offset.deltaZ * config.maxZ
         return copy(x = newX, z = newZ)
     }
+
+    operator fun minus(offset: WorldOffset) = this + -offset
 
     fun toBukkitLocation(world: World) = Location(world, x, y, z, yaw, pitch)
 
