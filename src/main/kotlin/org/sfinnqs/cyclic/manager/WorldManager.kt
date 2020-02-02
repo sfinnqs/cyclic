@@ -41,6 +41,7 @@ import org.bukkit.Bukkit
 import org.bukkit.World
 import org.bukkit.entity.Player
 import org.bukkit.event.player.PlayerTeleportEvent.TeleportCause.PLUGIN
+import org.sfinnqs.cyclic.logger
 import org.sfinnqs.cyclic.world.*
 import org.sfinnqs.cyclic.world.WorldOffset.Companion.ZERO
 import java.util.*
@@ -64,6 +65,11 @@ class WorldManager {
         val prev = lock.read { viewerEntities[player] }
         if (prev == id) return false
         return lock.write { viewerEntities.add(player, id) }
+    }
+
+    fun removePlayerId(player: Player): UUID? {
+        lock.read { viewerEntities[player] } ?: return null
+        return lock.write { viewerEntities.remove(player) }
     }
 
     // TODO this method should take offset into account
@@ -189,11 +195,13 @@ class WorldManager {
         val tps = mutableMapOf<Player, CyclicLocation>()
         lock.write {
             for ((viewer, offset) in offsets) {
+                logger.info { "setting offset of $viewer to $offset" }
                 val oldOffset = viewerOffsets.put(viewer, offset) ?: ZERO
                 if (oldOffset == offset) continue
                 // TODO ensure all viewers have locations
                 val oldLocation = locations[viewerEntities[viewer]!!]!!
                 val newLocation = oldLocation - offset
+                logger.info { "teleporting $viewer to $newLocation" }
                 tps[viewer] = newLocation
             }
         }

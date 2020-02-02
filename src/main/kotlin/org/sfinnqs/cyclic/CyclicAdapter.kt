@@ -30,6 +30,10 @@
  */
 package org.sfinnqs.cyclic
 
+import com.comphenix.protocol.PacketType
+import com.comphenix.protocol.PacketType.Play.Client
+import com.comphenix.protocol.PacketType.Play.Client.POSITION_LOOK
+import com.comphenix.protocol.PacketType.Play.Server
 import com.comphenix.protocol.PacketType.Play.Server.*
 import com.comphenix.protocol.ProtocolLibrary
 import com.comphenix.protocol.events.PacketAdapter
@@ -42,15 +46,13 @@ import net.jcip.annotations.ThreadSafe
 import org.bukkit.entity.Player
 import org.sfinnqs.cyclic.collect.WeakMap
 import org.sfinnqs.cyclic.collect.WeakSet
-import org.sfinnqs.cyclic.world.ChunkCoords
 import java.util.*
 import java.util.concurrent.locks.ReentrantReadWriteLock
 import kotlin.concurrent.read
 import kotlin.concurrent.write
 import org.sfinnqs.cyclic.TeleportFlag.X
 import org.sfinnqs.cyclic.TeleportFlag.Z
-import org.sfinnqs.cyclic.world.CyclicChunk
-import org.sfinnqs.cyclic.world.CyclicLocation
+import org.sfinnqs.cyclic.world.*
 
 @ThreadSafe
 class CyclicAdapter(cyclic: Cyclic) : PacketAdapter(
@@ -59,7 +61,10 @@ class CyclicAdapter(cyclic: Cyclic) : PacketAdapter(
     UNLOAD_CHUNK,
     NAMED_ENTITY_SPAWN,
     PLAYER_INFO,
-    POSITION
+    Server.POSITION,
+    ENTITY_TELEPORT,
+    Client.POSITION,
+    Client.POSITION_LOOK
 ) {
     private val manager = cyclic.manager
     private val customPackets = WeakSet<Any>()
@@ -79,6 +84,9 @@ class CyclicAdapter(cyclic: Cyclic) : PacketAdapter(
                 val (world, offset) = manager.loadChunk(player, coords)
                     ?: return
                 val clientCoords = (CyclicChunk(world, coords) + offset).coords
+                logger.info {
+                    "loading chunk at server $coords, client $clientCoords"
+                }
                 ints.write(0, clientCoords.x)
                 ints.write(1, clientCoords.z)
             }
@@ -89,12 +97,15 @@ class CyclicAdapter(cyclic: Cyclic) : PacketAdapter(
                 val (world, offset) = manager.unloadChunk(player, coords)
                     ?: return
                 val clientCoords = (CyclicChunk(world, coords) + offset).coords
+                logger.info {
+                    "UNloading chunk at server $coords, client $clientCoords"
+                }
                 ints.write(0, clientCoords.x)
                 ints.write(1, clientCoords.z)
             }
             NAMED_ENTITY_SPAWN -> {
                 val id = packet.uuiDs.read(0)
-                offsetDoubles(player, packet.doubles)
+                offsetServerDoubles(player, packet.doubles)
                 if (lock.read { id in knownIds[player].orEmpty() }) return
                 lock.write {
                     if (id in knownIds[player].orEmpty()) return
@@ -136,7 +147,7 @@ class CyclicAdapter(cyclic: Cyclic) : PacketAdapter(
                     else -> return
                 }
             }
-            POSITION -> {
+            Server.POSITION -> {
                 val (world, offset) = manager.getWorldAndOffset(player)
                     ?: return
                 val doubles = packet.doubles
@@ -152,15 +163,46 @@ class CyclicAdapter(cyclic: Cyclic) : PacketAdapter(
                 if (X !in flags) doubles.write(0, clientLocation.x)
                 // absolute z
                 if (Z !in flags) doubles.write(2, clientLocation.z)
+                logger.info { "server location: ${x to z} converted to $clientLocation" }
             }
+            ENTITY_TELEPORT -> offsetServerDoubles(player, packet.doubles)
         }
     }
 
-    private fun offsetDoubles(
+    override fun onPacketReceiving(event: PacketEvent) {
+        val packet = event.packet
+        if (packet.handle in customPackets) return
+        val player = event.player ?: return
+        when (packet.type) {
+            Client.POSITION, POSITION_LOOK -> offsetClientDoubles(
+                player,
+                packet.doubles
+            )
+        }
+    }
+
+    private fun offsetServerDoubles(
         player: Player,
         doubles: StructureModifier<Double>
     ) {
         val (world, offset) = manager.getWorldAndOffset(player) ?: return
+        offsetDoubles(doubles, world, offset)
+    }
+
+    private fun offsetClientDoubles(
+        player: Player,
+        doubles: StructureModifier<Double>
+    ) {
+        val (world, offset) = manager.getWorldAndOffset(player) ?: return
+//        logger.info { "offsetting client doubles by ${-offset}" }
+        offsetDoubles(doubles, world, -offset)
+    }
+
+    private fun offsetDoubles(
+        doubles: StructureModifier<Double>,
+        world: CyclicWorld,
+        offset: WorldOffset
+    ) {
         val x = doubles.read(0)
         val z = doubles.read(2)
         // y, yaw, pitch, and grounded are ignored

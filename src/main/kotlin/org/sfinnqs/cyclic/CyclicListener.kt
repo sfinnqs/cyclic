@@ -65,6 +65,8 @@ class CyclicListener(private val plugin: Cyclic) : Listener {
         plugin.manager.addPlayerId(player, player.uniqueId)
     }
 
+    // TODO player respawning doesn't show fakes
+
     @EventHandler(priority = LOWEST)
     fun onChunkLoad(event: ChunkLoadEvent) {
         val world = event.world
@@ -138,6 +140,7 @@ class CyclicListener(private val plugin: Cyclic) : Listener {
         val cyclicWorld = world.cyclicWorld ?: return
         player.teleport(getRepresentativeLocation(cyclicWorld, player))
         plugin.manager.setLocation(player.uniqueId, null)
+        plugin.manager.removePlayerId(player)
     }
 
     @EventHandler(priority = MONITOR, ignoreCancelled = true)

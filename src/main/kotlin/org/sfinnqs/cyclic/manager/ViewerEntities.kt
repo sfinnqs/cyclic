@@ -60,4 +60,11 @@ class ViewerEntities {
         assert(prevViewer2 == null)
         return true
     }
+
+    fun remove(viewer: Player): UUID? {
+        val entity = viewerEntities.remove(viewer) ?: return null
+        val prevViewer = entityViewers.remove(entity)
+        assert(prevViewer == viewer)
+        return entity
+    }
 }
